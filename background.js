@@ -347,6 +347,17 @@ async function handleOpenWorkspace({ id }) {
         console.log("Default workspace window gone, opening new");
       }
     }
+    // Focus an existing unassigned window if one exists
+    const allWins = await browser.windows.getAll({ populate: false });
+    const assignedIds = new Set(Object.values(winsMap));
+    const unassigned = allWins.filter(w => !assignedIds.has(w.id));
+    if (unassigned.length > 0) {
+      windowId = unassigned[unassigned.length - 1].id;
+      await browser.windows.update(windowId, { focused: true });
+      await saveWindowId(DEFAULT_WORKSPACE_ID, windowId);
+      await refreshAllBadges();
+      return { windowId };
+    }
     const win = await browser.windows.create({});
     windowId = win.id;
     await saveWindowId(DEFAULT_WORKSPACE_ID, windowId);
