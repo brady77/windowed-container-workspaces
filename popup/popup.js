@@ -28,6 +28,9 @@ const CONTAINER_ICONS = [
 
 const ICON_EMOJI  = Object.fromEntries(CONTAINER_ICONS.map(i => [i.id, i.emoji]));
 const COLOR_HEX   = Object.fromEntries(CONTAINER_COLORS.map(c => [c.id, c.hex]));
+COLOR_HEX["gray"] = "#6b7280";
+
+const DEFAULT_WORKSPACE_ID = "ws_default";
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
@@ -47,7 +50,11 @@ function send(type, payload = {}) {
 function render() {
   const list    = document.getElementById("workspace-list");
   const emptyEl = document.getElementById("empty-state");
-  const cards   = Object.values(workspaces).sort((a, b) => a.createdAt - b.createdAt);
+  const cards   = Object.values(workspaces).sort((a, b) => {
+    if (a.id === DEFAULT_WORKSPACE_ID) return -1;
+    if (b.id === DEFAULT_WORKSPACE_ID) return 1;
+    return a.createdAt - b.createdAt;
+  });
 
   list.querySelectorAll(".ws-card").forEach(el => el.remove());
 
@@ -116,19 +123,21 @@ function render() {
       actions.appendChild(openBtn);
     }
 
-    const renameBtn = document.createElement("button");
-    renameBtn.className = "ws-btn";
-    renameBtn.dataset.action = "rename";
-    renameBtn.title = "Rename";
-    renameBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
-    actions.appendChild(renameBtn);
+    if (ws.id !== DEFAULT_WORKSPACE_ID) {
+      const renameBtn = document.createElement("button");
+      renameBtn.className = "ws-btn";
+      renameBtn.dataset.action = "rename";
+      renameBtn.title = "Rename";
+      renameBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+      actions.appendChild(renameBtn);
 
-    const delBtn = document.createElement("button");
-    delBtn.className = "ws-btn danger";
-    delBtn.dataset.action = "delete";
-    delBtn.title = "Delete";
-    delBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
-    actions.appendChild(delBtn);
+      const delBtn = document.createElement("button");
+      delBtn.className = "ws-btn danger";
+      delBtn.dataset.action = "delete";
+      delBtn.title = "Delete";
+      delBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+      actions.appendChild(delBtn);
+    }
 
     card.appendChild(dot);
     card.appendChild(icon);

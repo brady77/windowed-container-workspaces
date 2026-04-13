@@ -118,6 +118,8 @@ const LZString = (() => {
 const SYNC_PREFIX = "wcw_ws_";   // prefix pro sync klíče
 const LOCAL_WINS  = "wcw_wins";  // lokální mapa windowId: { wsId: windowId }
 
+const DEFAULT_WORKSPACE_ID = "ws_default";
+
 function compressWs(ws) {
   // Odstraň windowId před uložením do sync (je lokální)
   const { windowId, ...syncData } = ws;
@@ -333,6 +335,25 @@ async function handleCreateWorkspace({ name, color, icon }) {
 }
 
 async function handleOpenWorkspace({ id }) {
+  if (id === DEFAULT_WORKSPACE_ID) {
+    const localWins = await browser.storage.local.get(LOCAL_WINS);
+    const winsMap = localWins[LOCAL_WINS] || {};
+    let windowId = winsMap[DEFAULT_WORKSPACE_ID] || null;
+    if (windowId !== null) {
+      try {
+        await browser.windows.update(windowId, { focused: true });
+        return { windowId };
+      } catch (e) {
+        console.log("Default workspace window gone, opening new");
+      }
+    }
+    const win = await browser.windows.create({});
+    windowId = win.id;
+    await saveWindowId(DEFAULT_WORKSPACE_ID, windowId);
+    await refreshAllBadges();
+    return { windowId };
+  }
+
   const workspaces = await loadWorkspaces();
   const ws = workspaces[id];
   if (!ws) throw new Error("Workspace not found: " + id);
@@ -369,6 +390,18 @@ async function handleOpenWorkspace({ id }) {
 }
 
 async function handleHibernateWorkspace({ id }) {
+  if (id === DEFAULT_WORKSPACE_ID) {
+    const localWins = await browser.storage.local.get(LOCAL_WINS);
+    const winsMap = localWins[LOCAL_WINS] || {};
+    const windowId = winsMap[DEFAULT_WORKSPACE_ID] || null;
+    if (windowId !== null) {
+      await saveWindowId(DEFAULT_WORKSPACE_ID, null);
+      try { await browser.windows.remove(windowId); } catch (e) {}
+      await refreshAllBadges();
+    }
+    return { ok: true };
+  }
+
   const workspaces = await loadWorkspaces();
   const ws = workspaces[id];
   if (!ws) throw new Error("Workspace not found: " + id);
@@ -432,6 +465,26 @@ async function handleGetState() {
       await saveWindowId(ws.id, null);
     }
   }
+
+  // Inject virtual default workspace
+  const localWins = await browser.storage.local.get(LOCAL_WINS);
+  const winsMap = localWins[LOCAL_WINS] || {};
+  let defaultWindowId = winsMap[DEFAULT_WORKSPACE_ID] || null;
+  if (defaultWindowId !== null && !openIds.has(defaultWindowId)) {
+    defaultWindowId = null;
+    await saveWindowId(DEFAULT_WORKSPACE_ID, null);
+  }
+  workspaces[DEFAULT_WORKSPACE_ID] = {
+    id: DEFAULT_WORKSPACE_ID,
+    name: "Default (no container)",
+    color: "gray",
+    icon: "circle",
+    cookieStoreId: "firefox-default",
+    windowId: defaultWindowId,
+    tabs: [],
+    createdAt: 0
+  };
+
   return workspaces;
 }
 
@@ -466,6 +519,14 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // ─── Auto-snapshot při zavření okna ──────────────────────────────────────────
 
 browser.windows.onRemoved.addListener(async (windowId) => {
+  // Handle default workspace window close
+  const localWins = await browser.storage.local.get(LOCAL_WINS);
+  const winsMap = localWins[LOCAL_WINS] || {};
+  if (winsMap[DEFAULT_WORKSPACE_ID] === windowId) {
+    await saveWindowId(DEFAULT_WORKSPACE_ID, null);
+    return;
+  }
+
   const workspaces = await loadWorkspaces();
   for (const ws of Object.values(workspaces)) {
     if (ws.windowId === windowId) {
@@ -499,6 +560,11 @@ browser.windows.onFocusChanged.addListener(async (windowId) => {
 
 browser.tabs.onCreated.addListener(async (tab) => {
   if (tab.cookieStoreId && tab.cookieStoreId !== "firefox-default") return;
+
+  // Don't reassign tabs in the default workspace window
+  const localWins = await browser.storage.local.get(LOCAL_WINS);
+  const winsMap = localWins[LOCAL_WINS] || {};
+  if (winsMap[DEFAULT_WORKSPACE_ID] === tab.windowId) return;
 
   const workspaces = await loadWorkspaces();
   const ws = Object.values(workspaces).find(w => w.windowId === tab.windowId);
@@ -534,6 +600,15 @@ const COLOR_MAP = {
 };
 
 async function updateBadge(windowId) {
+  // Check default workspace first
+  const localWins = await browser.storage.local.get(LOCAL_WINS);
+  const winsMap = localWins[LOCAL_WINS] || {};
+  if (winsMap[DEFAULT_WORKSPACE_ID] === windowId) {
+    await browser.browserAction.setBadgeText({ text: "DEF", windowId });
+    await browser.browserAction.setBadgeBackgroundColor({ color: "#6b7280", windowId });
+    return;
+  }
+
   const workspaces = await loadWorkspaces();
   const ws = Object.values(workspaces).find(w => w.windowId === windowId);
   if (ws) {
