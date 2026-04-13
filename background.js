@@ -416,14 +416,15 @@ async function handleHibernateWorkspace({ id }) {
   if (!ws) throw new Error("Workspace not found: " + id);
 
   if (ws.windowId !== null) {
-    const snapshot = await snapshotWindow(ws.windowId);
+    const windowId = ws.windowId;
+    const snapshot = await snapshotWindow(windowId);
     ws.tabs = snapshot.length > 0 ? snapshot : ws.tabs;
     ws.windowId = null;
     await saveWorkspace(ws);
     await saveWindowId(id, null);
 
     try {
-      await browser.windows.remove(ws.windowId);
+      await browser.windows.remove(windowId);
     } catch (e) {
       console.warn("Okno uz bylo zavreno:", e);
     }
