@@ -381,12 +381,10 @@ async function handleOpenWorkspace({ id }) {
     }
   }
 
-  // Na novém zařízení: ověř že kontejner existuje, jinak ho vytvoř
-  try {
-    await browser.contextualIdentities.get(ws.cookieStoreId);
-  } catch (e) {
-    console.log("Kontejner nenalezen, vytvářím nový pro:", ws.name);
-    const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
+  // Vždy hledej kontejner podle názvu (cookieStoreId se liší mezi zařízeními)
+  const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
+  if (container.cookieStoreId !== ws.cookieStoreId) {
+    console.log("cookieStoreId aktualizováno pro:", ws.name, "->", container.cookieStoreId);
     ws.cookieStoreId = container.cookieStoreId;
     await saveWorkspace(ws);
   }
