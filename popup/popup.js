@@ -69,46 +69,72 @@ function render() {
     const isLive    = ws.windowId !== null;
 
     // barvu nastavíme přes JS po vložení HTML (CSP blokuje inline style atributy)
-    card.innerHTML = `
-      <div class="ws-dot"></div>
-      <div class="ws-icon">${iconEmoji}</div>
-      <div class="ws-info">
-        <div class="ws-name">${escHtml(ws.name)}</div>
-        <div class="ws-meta">${tabCount} ${tabCount === 1 ? "tab" : "tabů"}</div>
-      </div>
-      <span class="ws-status ${isLive ? "live" : "sleep"}">${isLive ? "živý" : "spí"}</span>
-      <div class="ws-actions">
-        ${isLive
-          ? `<button class="ws-btn" data-action="hibernate" title="Hibernovat">
-               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                 <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-               </svg>
-             </button>`
-          : `<button class="ws-btn" data-action="open" title="Otevřít">
-               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                 <polygon points="5 3 19 12 5 21 5 3"/>
-               </svg>
-             </button>`
-        }
-        <button class="ws-btn" data-action="rename" title="Přejmenovat">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-          </svg>
-        </button>
-        <button class="ws-btn danger" data-action="delete" title="Smazat">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
-            <path d="M10 11v6"/><path d="M14 11v6"/>
-            <path d="M9 6V4h6v2"/>
-          </svg>
-        </button>
-      </div>
-    `;
+    // Dot
+    const dot = document.createElement("div");
+    dot.className = "ws-dot";
+    dot.style.setProperty("background-color", colorHex);
 
-    // Nastav barvu tečky přes JS property (obejde CSP)
-    const dot = card.querySelector(".ws-dot");
-    if (dot) dot.style.setProperty("background-color", colorHex);
+    // Icon
+    const icon = document.createElement("div");
+    icon.className = "ws-icon";
+    icon.textContent = iconEmoji;
+
+    // Info
+    const info = document.createElement("div");
+    info.className = "ws-info";
+    const nameEl = document.createElement("div");
+    nameEl.className = "ws-name";
+    nameEl.textContent = ws.name;
+    const metaEl = document.createElement("div");
+    metaEl.className = "ws-meta";
+    metaEl.textContent = `${tabCount} ${tabCount === 1 ? "tab" : "tabů"}`;
+    info.appendChild(nameEl);
+    info.appendChild(metaEl);
+
+    // Status
+    const status = document.createElement("span");
+    status.className = `ws-status ${isLive ? "live" : "sleep"}`;
+    status.textContent = isLive ? "živý" : "spí";
+
+    // Actions
+    const actions = document.createElement("div");
+    actions.className = "ws-actions";
+
+    if (isLive) {
+      const hibBtn = document.createElement("button");
+      hibBtn.className = "ws-btn";
+      hibBtn.dataset.action = "hibernate";
+      hibBtn.title = "Hibernovat";
+      hibBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+      actions.appendChild(hibBtn);
+    } else {
+      const openBtn = document.createElement("button");
+      openBtn.className = "ws-btn";
+      openBtn.dataset.action = "open";
+      openBtn.title = "Otevřít";
+      openBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+      actions.appendChild(openBtn);
+    }
+
+    const renameBtn = document.createElement("button");
+    renameBtn.className = "ws-btn";
+    renameBtn.dataset.action = "rename";
+    renameBtn.title = "Přejmenovat";
+    renameBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+    actions.appendChild(renameBtn);
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "ws-btn danger";
+    delBtn.dataset.action = "delete";
+    delBtn.title = "Smazat";
+    delBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+    actions.appendChild(delBtn);
+
+    card.appendChild(dot);
+    card.appendChild(icon);
+    card.appendChild(info);
+    card.appendChild(status);
+    card.appendChild(actions);
 
     card.addEventListener("click", (e) => {
       if (e.target.closest(".ws-btn")) return;
