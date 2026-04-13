@@ -548,56 +548,83 @@ browser.windows.onRemoved.addListener(async (windowId) => {
   }
 });
 
-// ─── Průběžný snapshot + badge při přepnutí okna ─────────────────────────────
+// ─── Badge při přepnutí okna ──────────────────────────────────────────────────
 
 browser.windows.onFocusChanged.addListener(async (windowId) => {
   if (windowId === browser.windows.WINDOW_ID_NONE) return;
-  const workspaces = await loadWorkspaces();
-  for (const ws of Object.values(workspaces)) {
-    if (ws.windowId !== null) {
-      const snap = await snapshotWindow(ws.windowId).catch(() => null);
-      if (snap && snap.length > 0) {
-        ws.tabs = snap;
-        await saveWorkspace(ws);
-      }
-    }
-  }
   await updateBadge(windowId).catch(() => {});
 });
 
-// ─── Automatické přiřazení kontejneru při otevření nového tabu ───────────────
+// ─── Automatické přiřazení kontejneru při otevření nového tabu + snapshot ────
 
 browser.tabs.onCreated.addListener(async (tab) => {
-  if (tab.cookieStoreId && tab.cookieStoreId !== "firefox-default") return;
+  if (!tab.cookieStoreId || tab.cookieStoreId === "firefox-default") {
+    // Don't reassign tabs in the default workspace window
+    const localWins = await browser.storage.local.get(LOCAL_WINS);
+    const winsMap = localWins[LOCAL_WINS] || {};
+    if (winsMap[DEFAULT_WORKSPACE_ID] === tab.windowId) return;
 
-  // Don't reassign tabs in the default workspace window
-  const localWins = await browser.storage.local.get(LOCAL_WINS);
-  const winsMap = localWins[LOCAL_WINS] || {};
-  if (winsMap[DEFAULT_WORKSPACE_ID] === tab.windowId) return;
+    const workspaces = await loadWorkspaces();
+    const ws = Object.values(workspaces).find(w => w.windowId === tab.windowId);
+    if (!ws) return;
 
+    console.log("Nový tab bez kontejneru v workspace okně, přesouvám do:", ws.cookieStoreId);
+
+    await new Promise(r => setTimeout(r, 100));
+
+    let url = tab.url;
+    if (!url || url === "" || url.startsWith("about:")) {
+      url = "about:blank";
+    }
+
+    try {
+      await browser.tabs.remove(tab.id);
+      await browser.tabs.create({
+        windowId: tab.windowId,
+        url,
+        cookieStoreId: ws.cookieStoreId,
+        active: true
+      });
+    } catch (e) {
+      console.error("Chyba při přesunu tabu do kontejneru:", e.message);
+    }
+  }
+
+  // Snapshot if this tab belongs to a workspace window
+  const workspaces = await loadWorkspaces();
+  const ws = Object.values(workspaces).find(w => w.windowId === tab.windowId);
+  if (ws) {
+    const snap = await snapshotWindow(tab.windowId).catch(() => null);
+    if (snap && snap.length > 0) {
+      ws.tabs = snap;
+      await saveWorkspace(ws);
+    }
+  }
+});
+
+// ─── Agresivní snapshot při změnách tabů ─────────────────────────────────────
+
+browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  if (changeInfo.status !== "complete") return;
   const workspaces = await loadWorkspaces();
   const ws = Object.values(workspaces).find(w => w.windowId === tab.windowId);
   if (!ws) return;
-
-  console.log("Nový tab bez kontejneru v workspace okně, přesouvám do:", ws.cookieStoreId);
-
-  await new Promise(r => setTimeout(r, 100));
-
-  let url = tab.url;
-  if (!url || url === "" || url.startsWith("about:")) {
-    url = "about:blank";
+  const snap = await snapshotWindow(tab.windowId).catch(() => null);
+  if (snap && snap.length > 0) {
+    ws.tabs = snap;
+    await saveWorkspace(ws);
   }
+});
 
-  try {
-    await browser.tabs.remove(tab.id);
-    await browser.tabs.create({
-      windowId: tab.windowId,
-      url,
-      cookieStoreId: ws.cookieStoreId,
-      active: true
-    });
-  } catch (e) {
-    console.error("Chyba při přesunu tabu do kontejneru:", e.message);
+browser.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+  await new Promise(r => setTimeout(r, 200));
+  const workspaces = await loadWorkspaces();
+  const ws = Object.values(workspaces).find(w => w.windowId === removeInfo.windowId);
+  if (!ws) return;
+  const snap = await snapshotWindow(removeInfo.windowId).catch(() => null);
+  if (snap && snap.length > 0) {
+    ws.tabs = snap;
+    await saveWorkspace(ws);
   }
 });
 
