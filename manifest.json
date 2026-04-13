@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Windowed Container Workspaces",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Manage browser workspaces with dedicated Firefox containers and persistent tabs. Each workspace runs in its own window with full container isolation.",
   "permissions": [
     "tabs",
@@ -31,13 +31,16 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "workspace-manager@addon",
-      "strict_min_version": "139.0",
+      "strict_min_version": "140.0",
       "update_url": "https://addons.mozilla.org/firefox/downloads/latest/3000968/addon-3000968-latest.xpi",
       "data_collection_permissions": {
         "required": [
           "none"
         ]
       }
+    },
+    "gecko_android": {
+      "strict_min_version": "142.0"
     }
   },
   "content_security_policy": "script-src 'self'; object-src 'self'",
