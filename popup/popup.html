@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -20,7 +20,7 @@
         </svg>
         Workspaces
       </div>
-      <button id="btn-new" class="btn-icon" title="Nový workspace">
+      <button id="btn-new" class="btn-icon" title="New workspace">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
@@ -36,8 +36,8 @@
           <rect x="3" y="14" width="7" height="7" rx="1.5"/>
           <rect x="14" y="14" width="7" height="7" rx="1.5"/>
         </svg>
-        <p>Žádné workspaces</p>
-        <small>Klikni na + pro vytvoření</small>
+        <p>No workspaces</p>
+        <small>Click + to create one</small>
       </div>
     </main>
 
@@ -45,31 +45,31 @@
     <div id="modal-overlay" class="hidden">
       <div id="modal">
         <div class="modal-header">
-          <h2 id="modal-title">Nový workspace</h2>
-          <button id="btn-modal-close" class="btn-icon" title="Zavřít">
+          <h2 id="modal-title">New workspace</h2>
+          <button id="btn-modal-close" class="btn-icon" title="Close">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
             </svg>
           </button>
         </div>
 
-        <label>Název
-          <input id="input-name" type="text" placeholder="Práce, Projekty, Osobní…" maxlength="40" />
+        <label>Name
+          <input id="input-name" type="text" placeholder="Work, Projects, Personal…" maxlength="40" />
         </label>
 
         <div id="color-icon-section">
-          <label>Barva kontejneru
+          <label>Container color
             <div class="color-picker" id="color-picker"></div>
           </label>
 
-          <label>Ikona kontejneru
+          <label>Container icon
             <div class="icon-picker" id="icon-picker"></div>
           </label>
         </div>
 
         <div class="modal-actions">
-          <button id="btn-cancel" class="btn-secondary">Zrušit</button>
-          <button id="btn-save" class="btn-primary">Vytvořit</button>
+          <button id="btn-cancel" class="btn-secondary">Cancel</button>
+          <button id="btn-save" class="btn-primary">Create</button>
         </div>
       </div>
     </div>
@@ -77,11 +77,11 @@
     <!-- Confirm delete dialog -->
     <div id="confirm-overlay" class="hidden">
       <div id="confirm-dialog">
-        <p id="confirm-text">Smazat workspace?</p>
-        <small>Smaže se kontejner i všechna jeho data (cookies atd.).</small>
+        <p id="confirm-text">Delete workspace?</p>
+        <small>This will also delete the container and all its data (cookies, etc.).</small>
         <div class="modal-actions">
-          <button id="confirm-cancel" class="btn-secondary">Zrušit</button>
-          <button id="confirm-ok" class="btn-danger">Smazat</button>
+          <button id="confirm-cancel" class="btn-secondary">Cancel</button>
+          <button id="confirm-ok" class="btn-danger">Delete</button>
         </div>
       </div>
     </div>
