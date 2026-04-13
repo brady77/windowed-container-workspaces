@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workspace Manager</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- Header -->
+    <header>
+      <div class="logo">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+          <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        </svg>
+        Workspaces
+      </div>
+      <button id="btn-new" class="btn-icon" title="Nový workspace">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Workspace list -->
+    <main id="workspace-list">
+      <div class="empty-state" id="empty-state">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".4">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+          <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        </svg>
+        <p>Žádné workspaces</p>
+        <small>Klikni na + pro vytvoření</small>
+      </div>
+    </main>
+
+    <!-- Create / Edit modal -->
+    <div id="modal-overlay" class="hidden">
+      <div id="modal">
+        <div class="modal-header">
+          <h2 id="modal-title">Nový workspace</h2>
+          <button id="btn-modal-close" class="btn-icon" title="Zavřít">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        <label>Název
+          <input id="input-name" type="text" placeholder="Práce, Projekty, Osobní…" maxlength="40" />
+        </label>
+
+        <div id="color-icon-section">
+          <label>Barva kontejneru
+            <div class="color-picker" id="color-picker"></div>
+          </label>
+
+          <label>Ikona kontejneru
+            <div class="icon-picker" id="icon-picker"></div>
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button id="btn-cancel" class="btn-secondary">Zrušit</button>
+          <button id="btn-save" class="btn-primary">Vytvořit</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirm delete dialog -->
+    <div id="confirm-overlay" class="hidden">
+      <div id="confirm-dialog">
+        <p id="confirm-text">Smazat workspace?</p>
+        <small>Smaže se kontejner i všechna jeho data (cookies atd.).</small>
+        <div class="modal-actions">
+          <button id="confirm-cancel" class="btn-secondary">Zrušit</button>
+          <button id="confirm-ok" class="btn-danger">Smazat</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
