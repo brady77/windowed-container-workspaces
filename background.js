@@ -606,7 +606,7 @@ browser.tabs.onCreated.addListener(async (tab) => {
 // ─── Agresivní snapshot při změnách tabů ─────────────────────────────────────
 
 browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.status !== "complete") return;
+  if (changeInfo.status !== "complete" && changeInfo.groupId === undefined) return;
   const workspaces = await loadWorkspaces();
   const ws = Object.values(workspaces).find(w => w.windowId === tab.windowId);
   if (!ws) return;
