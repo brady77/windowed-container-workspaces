@@ -567,36 +567,56 @@ browser.windows.onFocusChanged.addListener(async (windowId) => {
 
 // ─── Automatické přiřazení kontejneru při otevření nového tabu + snapshot ────
 
+// Track tabs being reassigned to avoid re-triggering listeners
+const reassigningTabs = new Set();
+
+async function reassignTabToContainer(tabId, windowId, url) {
+  reassigningTabs.add(tabId);
+  try {
+    await browser.tabs.remove(tabId);
+  } catch (e) {
+    reassigningTabs.delete(tabId);
+    throw e;
+  }
+  // tabId is now gone; the Set entry will be cleaned up naturally
+}
+
+async function resolveContainerForWindow(windowId) {
+  const localWins = await browser.storage.local.get(LOCAL_WINS);
+  const winsMap = localWins[LOCAL_WINS] || {};
+  if (winsMap[DEFAULT_WORKSPACE_ID] === windowId) return null;
+
+  const workspaces = await loadWorkspaces();
+  const ws = Object.values(workspaces).find(w => w.windowId === windowId);
+  if (!ws) return null;
+
+  const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
+  if (container.cookieStoreId !== ws.cookieStoreId) {
+    console.log("cookieStoreId aktualizováno pro:", ws.name, "->", container.cookieStoreId);
+    ws.cookieStoreId = container.cookieStoreId;
+    await saveWorkspace(ws);
+  }
+  return container;
+}
+
 browser.tabs.onCreated.addListener(async (tab) => {
+  if (reassigningTabs.has(tab.id)) return;
+
   if (!tab.cookieStoreId || tab.cookieStoreId === "firefox-default") {
-    // Don't reassign tabs in the default workspace window
-    const localWins = await browser.storage.local.get(LOCAL_WINS);
-    const winsMap = localWins[LOCAL_WINS] || {};
-    if (winsMap[DEFAULT_WORKSPACE_ID] === tab.windowId) return;
-
-    const workspaces = await loadWorkspaces();
-    const ws = Object.values(workspaces).find(w => w.windowId === tab.windowId);
-    if (!ws) return;
-
-    // Vždy hledej kontejner podle názvu (cookieStoreId se liší mezi zařízeními)
-    const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
-    if (container.cookieStoreId !== ws.cookieStoreId) {
-      console.log("cookieStoreId aktualizováno pro:", ws.name, "->", container.cookieStoreId);
-      ws.cookieStoreId = container.cookieStoreId;
-      await saveWorkspace(ws);
-    }
+    const container = await resolveContainerForWindow(tab.windowId);
+    if (!container) return;
 
     console.log("Nový tab bez kontejneru v workspace okně, přesouvám do:", container.cookieStoreId);
 
     await new Promise(r => setTimeout(r, 100));
 
-    let url = tab.url;
-    if (!url || url === "" || url.startsWith("about:")) {
-      url = "about:blank";
-    }
+    // If the URL is already a real URL, preserve it; otherwise use about:blank
+    const url = (tab.url && (tab.url.startsWith("http://") || tab.url.startsWith("https://")))
+      ? tab.url
+      : "about:blank";
 
     try {
-      await browser.tabs.remove(tab.id);
+      await reassignTabToContainer(tab.id, tab.windowId, url);
       await browser.tabs.create({
         windowId: tab.windowId,
         url,
@@ -606,6 +626,7 @@ browser.tabs.onCreated.addListener(async (tab) => {
     } catch (e) {
       console.error("Chyba při přesunu tabu do kontejneru:", e.message);
     }
+    return;
   }
 
   // Snapshot if this tab belongs to a workspace window
@@ -623,6 +644,29 @@ browser.tabs.onCreated.addListener(async (tab) => {
 // ─── Agresivní snapshot při změnách tabů ─────────────────────────────────────
 
 browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  // Catch external URLs arriving after tab creation (URL not yet set in onCreated)
+  if (changeInfo.url &&
+      (changeInfo.url.startsWith("http://") || changeInfo.url.startsWith("https://")) &&
+      (!tab.cookieStoreId || tab.cookieStoreId === "firefox-default") &&
+      !reassigningTabs.has(tabId)) {
+    const container = await resolveContainerForWindow(tab.windowId);
+    if (container) {
+      console.log("URL arrived after tab creation, přesouvám do kontejneru:", container.cookieStoreId, changeInfo.url);
+      try {
+        await reassignTabToContainer(tabId, tab.windowId, changeInfo.url);
+        await browser.tabs.create({
+          windowId: tab.windowId,
+          url: changeInfo.url,
+          cookieStoreId: container.cookieStoreId,
+          active: true
+        });
+      } catch (e) {
+        console.error("Chyba při přesunu tabu (onUpdated) do kontejneru:", e.message);
+      }
+      return;
+    }
+  }
+
   if (changeInfo.status !== "complete" && changeInfo.groupId === undefined) return;
   const workspaces = await loadWorkspaces();
   const ws = Object.values(workspaces).find(w => w.windowId === tab.windowId);
