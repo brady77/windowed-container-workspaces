@@ -567,18 +567,30 @@ browser.windows.onFocusChanged.addListener(async (windowId) => {
 
 // ─── Automatické přiřazení kontejneru při otevření nového tabu + snapshot ────
 
-// Track tabs being reassigned to avoid re-triggering listeners
-const reassigningTabs = new Set();
+// tabId → { windowId, cookieStoreId, wsName, wsColor, wsIcon, timeoutId }
+// Tabs parked here are awaiting URL resolution before being reassigned to a container.
+// Also used as a guard to prevent re-triggering listeners on the replacement tab.
+const pendingTabs = new Map();
 
-async function reassignTabToContainer(tabId, windowId, url) {
-  reassigningTabs.add(tabId);
+function removePending(tabId) {
+  const entry = pendingTabs.get(tabId);
+  if (entry) {
+    clearTimeout(entry.timeoutId);
+    pendingTabs.delete(tabId);
+  }
+}
+
+async function doReassign(tabId, windowId, cookieStoreId, url) {
+  // Mark as being reassigned so onCreated ignores the new tab
+  pendingTabs.set(tabId, { windowId, cookieStoreId, timeoutId: null });
   try {
     await browser.tabs.remove(tabId);
+    await browser.tabs.create({ windowId, url, cookieStoreId, active: true });
   } catch (e) {
-    reassigningTabs.delete(tabId);
-    throw e;
+    console.error("Chyba při přesunu tabu do kontejneru:", e.message);
+  } finally {
+    pendingTabs.delete(tabId);
   }
-  // tabId is now gone; the Set entry will be cleaned up naturally
 }
 
 async function resolveContainerForWindow(windowId) {
@@ -600,32 +612,35 @@ async function resolveContainerForWindow(windowId) {
 }
 
 browser.tabs.onCreated.addListener(async (tab) => {
-  if (reassigningTabs.has(tab.id)) return;
+  // Ignore replacement tabs we created ourselves
+  if (pendingTabs.has(tab.id)) return;
 
   if (!tab.cookieStoreId || tab.cookieStoreId === "firefox-default") {
     const container = await resolveContainerForWindow(tab.windowId);
     if (!container) return;
 
-    console.log("Nový tab bez kontejneru v workspace okně, přesouvám do:", container.cookieStoreId);
-
-    await new Promise(r => setTimeout(r, 100));
-
-    // If the URL is already a real URL, preserve it; otherwise use about:blank
-    const url = (tab.url && (tab.url.startsWith("http://") || tab.url.startsWith("https://")))
-      ? tab.url
-      : "about:blank";
-
-    try {
-      await reassignTabToContainer(tab.id, tab.windowId, url);
-      await browser.tabs.create({
-        windowId: tab.windowId,
-        url,
-        cookieStoreId: container.cookieStoreId,
-        active: true
-      });
-    } catch (e) {
-      console.error("Chyba při přesunu tabu do kontejneru:", e.message);
+    // If URL is already a real URL (unlikely but possible), reassign immediately
+    if (tab.url && (tab.url.startsWith("http://") || tab.url.startsWith("https://"))) {
+      console.log("Nový tab s URL v workspace okně, přesouvám do:", container.cookieStoreId, tab.url);
+      await doReassign(tab.id, tab.windowId, container.cookieStoreId, tab.url);
+      return;
     }
+
+    // Park the tab and wait for the real URL to arrive via onUpdated
+    console.log("Parkuji tab, čekám na URL:", tab.id);
+    const timeoutId = setTimeout(async () => {
+      // Safety timeout: if no real URL arrived in 2s, reassign with about:blank
+      if (!pendingTabs.has(tab.id)) return;
+      console.log("Timeout pro tab:", tab.id, "- přesouvám jako about:blank");
+      pendingTabs.delete(tab.id);
+      await doReassign(tab.id, tab.windowId, container.cookieStoreId, "about:blank").catch(() => {});
+    }, 2000);
+
+    pendingTabs.set(tab.id, {
+      windowId: tab.windowId,
+      cookieStoreId: container.cookieStoreId,
+      timeoutId
+    });
     return;
   }
 
@@ -644,27 +659,28 @@ browser.tabs.onCreated.addListener(async (tab) => {
 // ─── Agresivní snapshot při změnách tabů ─────────────────────────────────────
 
 browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  // Catch external URLs arriving after tab creation (URL not yet set in onCreated)
-  if (changeInfo.url &&
-      (changeInfo.url.startsWith("http://") || changeInfo.url.startsWith("https://")) &&
-      (!tab.cookieStoreId || tab.cookieStoreId === "firefox-default") &&
-      !reassigningTabs.has(tabId)) {
-    const container = await resolveContainerForWindow(tab.windowId);
-    if (container) {
-      console.log("URL arrived after tab creation, přesouvám do kontejneru:", container.cookieStoreId, changeInfo.url);
-      try {
-        await reassignTabToContainer(tabId, tab.windowId, changeInfo.url);
-        await browser.tabs.create({
-          windowId: tab.windowId,
-          url: changeInfo.url,
-          cookieStoreId: container.cookieStoreId,
-          active: true
-        });
-      } catch (e) {
-        console.error("Chyba při přesunu tabu (onUpdated) do kontejneru:", e.message);
-      }
+  // Handle pending tabs waiting for their real URL
+  if (pendingTabs.has(tabId)) {
+    const { windowId, cookieStoreId } = pendingTabs.get(tabId);
+
+    if (changeInfo.url && (changeInfo.url.startsWith("http://") || changeInfo.url.startsWith("https://"))) {
+      // Real URL arrived — reassign with it
+      console.log("URL dorazila pro parkovaný tab:", tabId, changeInfo.url);
+      removePending(tabId);
+      await doReassign(tabId, windowId, cookieStoreId, changeInfo.url).catch(() => {});
       return;
     }
+
+    if (changeInfo.status === "complete") {
+      // Tab finished loading as about:blank — plain new tab, reassign with about:blank
+      console.log("Tab dokončen jako about:blank:", tabId);
+      removePending(tabId);
+      await doReassign(tabId, windowId, cookieStoreId, "about:blank").catch(() => {});
+      return;
+    }
+
+    // Still waiting — do not fall through to snapshot logic
+    return;
   }
 
   if (changeInfo.status !== "complete" && changeInfo.groupId === undefined) return;
@@ -679,6 +695,9 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 browser.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+  // Clean up if the user closed a parked tab before its URL arrived
+  removePending(tabId);
+
   await new Promise(r => setTimeout(r, 200));
   const workspaces = await loadWorkspaces();
   const ws = Object.values(workspaces).find(w => w.windowId === removeInfo.windowId);
