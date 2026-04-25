@@ -364,3 +364,7 @@ input[type="text"]::placeholder { color: var(--text-dim); opacity: .5; }
   color: var(--danger);
   padding: 4px 2px;
 }
+
+/* ─── Storage size indicator ─────────────────────────────────────────────── */
+.size-warning { color: #f97316; }
+.size-danger  { color: var(--danger); }

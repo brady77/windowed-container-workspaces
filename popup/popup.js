@@ -162,6 +162,18 @@ function render() {
     });
 
     list.appendChild(card);
+
+    if (ws.id !== DEFAULT_WORKSPACE_ID) {
+      send("GET_WS_SIZE", { id: ws.id }).then(({ bytes }) => {
+        const kb = bytes / 1024;
+        const sizeStr = kb < 1 ? `${bytes} B` : `${kb.toFixed(1)} KB`;
+        const cls = bytes > 7168 ? "size-danger" : bytes > 6144 ? "size-warning" : "";
+        const sizeSpan = document.createElement("span");
+        if (cls) sizeSpan.className = cls;
+        sizeSpan.textContent = ` · ${sizeStr} / 8 KB`;
+        metaEl.appendChild(sizeSpan);
+      }).catch(() => {});
+    }
   });
 }
 

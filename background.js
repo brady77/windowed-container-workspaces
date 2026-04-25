@@ -464,6 +464,11 @@ async function handleRenameWorkspace({ id, name }) {
   return ws;
 }
 
+async function handleGetWsSize({ id }) {
+  const bytes = await browser.storage.sync.getBytesInUse("wcw_ws_" + id);
+  return { bytes };
+}
+
 async function handleGetState() {
   const workspaces = await loadWorkspaces();
   const wins = await browser.windows.getAll();
@@ -506,6 +511,7 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   let handler;
   switch (msg.type) {
     case "GET_STATE":           handler = handleGetState; break;
+    case "GET_WS_SIZE":         handler = () => handleGetWsSize(msg.payload); break;
     case "CREATE_WORKSPACE":    handler = () => handleCreateWorkspace(msg.payload); break;
     case "OPEN_WORKSPACE":      handler = () => handleOpenWorkspace(msg.payload); break;
     case "HIBERNATE_WORKSPACE": handler = () => handleHibernateWorkspace(msg.payload); break;
