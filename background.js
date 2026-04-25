@@ -443,7 +443,8 @@ async function handleDeleteWorkspace({ id }) {
     try { await browser.windows.remove(ws.windowId); } catch (e) {}
   }
 
-  await deleteContainer(ws.cookieStoreId);
+  const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
+  await deleteContainer(container.cookieStoreId);
   await deleteWorkspaceFromSync(id);
   console.log("Workspace smazan:", id);
   return { ok: true };
@@ -458,8 +459,10 @@ async function handleRenameWorkspace({ id, name }) {
   const duplicate = Object.values(workspaces).find(w => w.id !== id && w.name.toLowerCase() === name.toLowerCase());
   if (duplicate) throw new Error("Workspace s tímto názvem již existuje.");
 
+  // Resolve by old name before renaming (cookieStoreId may be stale on this device)
+  const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
   ws.name = name;
-  await browser.contextualIdentities.update(ws.cookieStoreId, { name });
+  await browser.contextualIdentities.update(container.cookieStoreId, { name });
   await saveWorkspace(ws);
   return ws;
 }
