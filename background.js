@@ -371,6 +371,14 @@ async function handleOpenWorkspace({ id }) {
 
   console.log("Oteviram workspace:", ws.name, "cookieStoreId:", ws.cookieStoreId);
 
+  // Vždy hledej kontejner podle názvu (cookieStoreId se liší mezi zařízeními)
+  const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
+  if (container.cookieStoreId !== ws.cookieStoreId) {
+    console.log("cookieStoreId aktualizováno pro:", ws.name, "->", container.cookieStoreId);
+    ws.cookieStoreId = container.cookieStoreId;
+    await saveWorkspace(ws);
+  }
+
   // Pokud je okno již otevřené, jen ho aktivuj
   if (ws.windowId !== null) {
     try {
@@ -379,14 +387,6 @@ async function handleOpenWorkspace({ id }) {
     } catch (e) {
       console.log("Okno neexistuje, otviram nove");
     }
-  }
-
-  // Vždy hledej kontejner podle názvu (cookieStoreId se liší mezi zařízeními)
-  const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
-  if (container.cookieStoreId !== ws.cookieStoreId) {
-    console.log("cookieStoreId aktualizováno pro:", ws.name, "->", container.cookieStoreId);
-    ws.cookieStoreId = container.cookieStoreId;
-    await saveWorkspace(ws);
   }
 
   const windowId = await openWorkspaceWindow(ws);
