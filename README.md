@@ -11,6 +11,8 @@ A Firefox extension that lets you organize your browsing into isolated workspace
 - **Sync across devices** — workspaces sync via Firefox Sync to all your signed-in Firefox instances
 - **Workspace badge** — the toolbar icon shows a 3-letter abbreviation of the active workspace so you always know where you are
 - **New tabs stay in container** — any tab opened inside a workspace window is automatically assigned to the correct container
+- **Default (no container) workspace** — a built-in workspace that opens a regular Firefox window without any container, ideal for general browsing or accessing Firefox settings
+- **Per-workspace storage indicator** — shows how much of the 8 KB sync limit each workspace uses
 
 ## Why this extension?
 
@@ -27,9 +29,9 @@ Firefox has containers and tab groups, but no concept of a "workspace" that ties
 
 > Note: Temporary add-ons are removed on Firefox restart and do not support Firefox Sync.
 
-### Permanent (signed)
+### Install from Firefox Add-ons
 
-Download the latest signed `.xpi` from the [Releases](../../releases) page and open it in Firefox.
+Install directly from [addons.mozilla.org](https://addons.mozilla.org/firefox/addon/windowed-container-workspaces/) — Firefox will handle updates automatically.
 
 ## Usage
 
@@ -52,6 +54,9 @@ Click the **🗑** button — the window closes, the Firefox container is remove
 
 ### Rename a workspace
 Click the **✎** button — the workspace and its container are renamed simultaneously.
+
+### Default (no container) workspace
+Always visible at the top of the list. Opens a regular Firefox window without any container — tabs are not assigned to any container. Cannot be renamed or deleted.
 
 ## Sync behavior
 
@@ -77,6 +82,10 @@ Workspaces are synced via `storage.sync` (Firefox Sync). Each workspace is store
 ## Contributing
 
 Issues and pull requests are welcome. Please open an issue before submitting large changes.
+
+## Credits
+
+Developed in collaboration with [Claude](https://claude.ai) (Anthropic's AI assistant), which helped with architecture, implementation, debugging, and documentation.
 
 ## License
 
