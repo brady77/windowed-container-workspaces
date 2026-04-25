@@ -575,7 +575,15 @@ browser.tabs.onCreated.addListener(async (tab) => {
     const ws = Object.values(workspaces).find(w => w.windowId === tab.windowId);
     if (!ws) return;
 
-    console.log("Nový tab bez kontejneru v workspace okně, přesouvám do:", ws.cookieStoreId);
+    // Vždy hledej kontejner podle názvu (cookieStoreId se liší mezi zařízeními)
+    const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
+    if (container.cookieStoreId !== ws.cookieStoreId) {
+      console.log("cookieStoreId aktualizováno pro:", ws.name, "->", container.cookieStoreId);
+      ws.cookieStoreId = container.cookieStoreId;
+      await saveWorkspace(ws);
+    }
+
+    console.log("Nový tab bez kontejneru v workspace okně, přesouvám do:", container.cookieStoreId);
 
     await new Promise(r => setTimeout(r, 100));
 
@@ -589,7 +597,7 @@ browser.tabs.onCreated.addListener(async (tab) => {
       await browser.tabs.create({
         windowId: tab.windowId,
         url,
-        cookieStoreId: ws.cookieStoreId,
+        cookieStoreId: container.cookieStoreId,
         active: true
       });
     } catch (e) {
