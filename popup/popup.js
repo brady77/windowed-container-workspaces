@@ -185,8 +185,7 @@ async function refresh() {
 }
 
 async function handleOpen(id) {
-  await send("OPEN_WORKSPACE", { id });
-  await refresh();
+  send("OPEN_WORKSPACE", { id }); // fire and forget
   window.close();
 }
 
