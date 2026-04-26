@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 98 98" width="98" height="98" style="color-scheme: light dark;">
+  <rect x="1" y="57" width="40" height="40" rx="4" ry="4" fill="none" stroke-width="2" style="stroke: light-dark(rgb(0,0,0), rgb(255,255,255));"/>
+  <rect x="57" y="57" width="40" height="40" rx="4" ry="4" fill="none" stroke-width="2" style="stroke: light-dark(rgb(0,0,0), rgb(255,255,255));"/>
+  <rect x="1" y="1" width="40" height="40" rx="4" ry="4" fill="none" stroke-width="2" style="stroke: light-dark(rgb(0,0,0), rgb(255,255,255));"/>
+  <ellipse cx="16.5" cy="83.5" rx="6" ry="6" stroke="none" style="fill: light-dark(rgb(0,0,0), rgb(237,237,237));"/>
+  <path d="M 69.5 80.5 L 71.44 78.56 Q 72.5 77.5 73.56 78.56 L 77.44 82.44 Q 78.5 83.5 77.44 84.56 L 73.56 88.44 Q 72.5 89.5 71.44 88.44 L 67.56 84.56 Q 66.5 83.5 67.56 82.44 Z" stroke="none" style="fill: light-dark(rgb(0,0,0), rgb(237,237,237));"/>
+  <rect x="10.5" y="21.5" width="12" height="12" rx="1.8" ry="1.8" stroke="none" style="fill: light-dark(rgb(0,0,0), rgb(237,237,237));"/>
+</svg>
