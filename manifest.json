@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Windowed Container Workspaces",
-  "version": "1.4.5",
+  "version": "1.4.6",
   "description": "Manage browser workspaces with dedicated Firefox containers and persistent tabs. Each workspace runs in its own window with full container isolation.",
   "permissions": [
     "tabs",
@@ -21,22 +21,22 @@
     "theme_icons": [
       {
         "light": "icons/icon96.png",
-        "dark": "icons/icon96.png",
+        "dark": "icons/icon-dark-96.png",
         "size": 96
       },
       {
         "light": "icons/icon48.png",
-        "dark": "icons/icon48.png",
+        "dark": "icons/icon-dark-48.png",
         "size": 48
       },
       {
         "light": "icons/icon32.png",
-        "dark": "icons/icon32.png",
+        "dark": "icons/icon-dark-32.png",
         "size": 32
       },
       {
         "light": "icons/icon16.png",
-        "dark": "icons/icon16.png",
+        "dark": "icons/icon-dark-16.png",
         "size": 16
       }
     ],
