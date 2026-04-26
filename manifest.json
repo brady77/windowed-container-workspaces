@@ -19,26 +19,10 @@
       "96": "icons/icon96.png"
     },
     "theme_icons": [
-      {
-        "light": "icons/icon96.png",
-        "dark": "icons/icon-dark-96.png",
-        "size": 96
-      },
-      {
-        "light": "icons/icon48.png",
-        "dark": "icons/icon-dark-48.png",
-        "size": 48
-      },
-      {
-        "light": "icons/icon32.png",
-        "dark": "icons/icon-dark-32.png",
-        "size": 32
-      },
-      {
-        "light": "icons/icon16.png",
-        "dark": "icons/icon-dark-16.png",
-        "size": 16
-      }
+      { "light": "icons/icon16.png", "dark": "icons/icon-dark-16.png", "size": 16 },
+      { "light": "icons/icon32.png", "dark": "icons/icon-dark-32.png", "size": 32 },
+      { "light": "icons/icon48.png", "dark": "icons/icon-dark-48.png", "size": 48 },
+      { "light": "icons/icon96.png", "dark": "icons/icon-dark-96.png", "size": 96 }
     ],
     "default_title": "Workspace Manager"
   },
