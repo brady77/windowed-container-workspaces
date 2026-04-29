@@ -626,15 +626,22 @@ browser.tabs.onCreated.addListener(async (tab) => {
       return;
     }
 
-    // Park the tab and wait for the real URL to arrive via onUpdated
+    // Park the tab, then poll after 50ms: if still about:blank it's a plain new tab,
+    // if a real URL arrived it's from an external app. onUpdated is kept as fallback.
     console.log("Parkuji tab, čekám na URL:", tab.id);
     const timeoutId = setTimeout(async () => {
-      // Safety timeout: if no real URL arrived in 2s, reassign with about:blank
       if (!pendingTabs.has(tab.id)) return;
-      console.log("Timeout pro tab:", tab.id, "- přesouvám jako about:blank");
-      pendingTabs.delete(tab.id);
-      await doReassign(tab.id, tab.windowId, container.cookieStoreId, "about:blank").catch(() => {});
-    }, 2000);
+      let url = "about:blank";
+      try {
+        const current = await browser.tabs.get(tab.id);
+        if (current.url && (current.url.startsWith("http://") || current.url.startsWith("https://"))) {
+          url = current.url;
+        }
+      } catch (e) {}
+      console.log("Poll result for tab:", tab.id, "->", url);
+      removePending(tab.id);
+      await doReassign(tab.id, tab.windowId, container.cookieStoreId, url).catch(() => {});
+    }, 50);
 
     pendingTabs.set(tab.id, {
       windowId: tab.windowId,
