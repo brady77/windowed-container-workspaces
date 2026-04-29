@@ -75,7 +75,7 @@ function render() {
     const tabCount  = ws.tabs.length;
     const isLive    = ws.windowId !== null;
 
-    // barvu nastavíme přes JS po vložení HTML (CSP blokuje inline style atributy)
+    // Color is set via JS after inserting HTML (CSP blocks inline style attributes)
     // Dot
     const dot = document.createElement("div");
     dot.className = "ws-dot";
@@ -238,7 +238,7 @@ function showModal(wsId = null) {
   selColor = ws ? ws.color : CONTAINER_COLORS[0].id;
   selIcon  = ws ? ws.icon  : CONTAINER_ICONS[0].id;
 
-  // Skrýt barvu/ikonu při přejmenování
+  // Hide color/icon picker when renaming (not applicable, only used when creating)
   document.getElementById("color-icon-section").style.display = ws ? "none" : "";
 
   renderColorPicker();

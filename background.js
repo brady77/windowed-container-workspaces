@@ -1,7 +1,9 @@
 // ─── Windowed Container Workspaces – background.js ───────────────────────────
 
-// ─── LZ-string komprese (inline, bez závislostí) ──────────────────────────────
-// Zjednodušená implementace LZ-based komprese pro storage.sync
+// ─── LZ-string compression (inline, no external dependencies) ───────────────
+// Inline implementation of the LZ-based compression algorithm (originally by pieroxy,
+// MIT license, https://github.com/pieroxy/lz-string) used to compress workspace data
+// to fit within Firefox's storage.sync 8 KB per-key limit. No external requests are made.
 const LZString = (() => {
   const keyStrBase64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
   const baseReverseDic = {};
@@ -111,9 +113,9 @@ const LZString = (() => {
   };
 })();
 
-// ─── Storage vrstva se sync podporou ─────────────────────────────────────────
-// Každý workspace je uložen jako samostatný klíč "ws_{id}" v storage.sync
-// (pro merge support). windowId se ukládá pouze do storage.local (je lokální).
+// ─── Storage layer with sync support ─────────────────────────────────────────
+// Each workspace is stored as a separate key "ws_{id}" in storage.sync
+// (for merge support). windowId is stored only in storage.local (it is device-local).
 
 const SYNC_PREFIX = "wcw_ws_";   // prefix pro sync klíče
 const LOCAL_WINS  = "wcw_wins";  // lokální mapa windowId: { wsId: windowId }
@@ -121,7 +123,7 @@ const LOCAL_WINS  = "wcw_wins";  // lokální mapa windowId: { wsId: windowId }
 const DEFAULT_WORKSPACE_ID = "ws_default";
 
 function compressWs(ws) {
-  // Odstraň windowId před uložením do sync (je lokální)
+  // Strip windowId before saving to sync (it is device-local)
   const { windowId, ...syncData } = ws;
   return LZString.compress(JSON.stringify(syncData));
 }
@@ -136,7 +138,7 @@ function decompressWs(compressed) {
 }
 
 async function loadWorkspaces() {
-  // Načti všechny sync klíče s prefixem
+  // Load all sync keys with the prefix
   let syncData = {};
   try {
     const allSync = await browser.storage.sync.get(null);
@@ -152,7 +154,7 @@ async function loadWorkspaces() {
     syncData = local.workspaces || {};
   }
 
-  // Přidej lokální windowId
+  // Attach device-local windowId to each workspace
   const localWins = await browser.storage.local.get(LOCAL_WINS);
   const wins = localWins[LOCAL_WINS] || {};
   for (const ws of Object.values(syncData)) {
@@ -165,7 +167,9 @@ async function loadWorkspaces() {
 async function saveWorkspace(ws) {
   const { windowId, ...syncData } = ws;
 
-  // Ulož do sync (bez windowId)
+  // Workspace data is compressed with LZString before storing to stay within Firefox
+  // Sync's 8 KB per-key limit. Compression typically reduces payload size by 60–70%.
+  // Save to sync (without windowId)
   try {
     await browser.storage.sync.set({
       [SYNC_PREFIX + ws.id]: compressWs(ws)
@@ -215,7 +219,9 @@ async function saveWorkspaces(workspaces) {
 // ─── Container helpers ────────────────────────────────────────────────────────
 
 async function findOrCreateContainer(name, color, icon) {
-  // Nejdřív hledej kontejner se stejným názvem (pro sync mezi zařízeními)
+  // Always resolve by name, not by stored cookieStoreId: cookieStoreId values are
+  // assigned locally by Firefox and differ between devices when using Firefox Sync.
+  // The container name is the stable cross-device identifier.
   const existing = await browser.contextualIdentities.query({ name });
   if (existing && existing.length > 0) {
     console.log("Nalezen existující kontejner:", name, existing[0].cookieStoreId);
@@ -256,14 +262,14 @@ async function openWorkspaceWindow(workspace) {
     createdTabs.push(tab);
   }
 
-  // Obnov pinned stav
+  // Restore pinned state
   for (let i = 0; i < createdTabs.length && i < workspace.tabs.length; i++) {
     if (workspace.tabs[i].pinned) {
       await browser.tabs.update(createdTabs[i].id, { pinned: true });
     }
   }
 
-  // Obnov skupiny tabů
+  // Restore tab groups
   try {
     const groupsToCreate = {};
     for (let i = 0; i < workspace.tabs.length && i < createdTabs.length; i++) {
@@ -287,7 +293,7 @@ async function openWorkspaceWindow(workspace) {
     console.warn("Obnova skupin selhala:", e.message);
   }
 
-  // Zavři výchozí prázdný tab
+  // Close the default blank tab opened automatically by browser.windows.create
   if (defaultTabs.length > 0) {
     await browser.tabs.remove(defaultTabs.map(t => t.id));
   }
@@ -313,7 +319,7 @@ async function snapshotWindow(windowId) {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 async function handleCreateWorkspace({ name, color, icon }) {
-  // Kontrola unikátnosti názvu
+  // Check for duplicate name
   const workspaces = await loadWorkspaces();
   const duplicate = Object.values(workspaces).find(w => w.name.toLowerCase() === name.toLowerCase());
   if (duplicate) throw new Error("Workspace s tímto názvem již existuje.");
@@ -371,7 +377,7 @@ async function handleOpenWorkspace({ id }) {
 
   console.log("Oteviram workspace:", ws.name, "cookieStoreId:", ws.cookieStoreId);
 
-  // Vždy hledej kontejner podle názvu (cookieStoreId se liší mezi zařízeními)
+  // Always resolve container by name (cookieStoreId differs between devices)
   const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
   if (container.cookieStoreId !== ws.cookieStoreId) {
     console.log("cookieStoreId aktualizováno pro:", ws.name, "->", container.cookieStoreId);
@@ -379,7 +385,7 @@ async function handleOpenWorkspace({ id }) {
     await saveWorkspace(ws);
   }
 
-  // Pokud je okno již otevřené, jen ho aktivuj
+  // If the window is already open, just focus it
   if (ws.windowId !== null) {
     try {
       await browser.windows.update(ws.windowId, { focused: true });
@@ -455,7 +461,7 @@ async function handleRenameWorkspace({ id, name }) {
   const ws = workspaces[id];
   if (!ws) throw new Error("Workspace not found: " + id);
 
-  // Kontrola unikátnosti nového názvu
+  // Check for duplicate name
   const duplicate = Object.values(workspaces).find(w => w.id !== id && w.name.toLowerCase() === name.toLowerCase());
   if (duplicate) throw new Error("Workspace s tímto názvem již existuje.");
 
@@ -535,7 +541,7 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true;
 });
 
-// ─── Auto-snapshot při zavření okna ──────────────────────────────────────────
+// ─── Auto-snapshot on window close ───────────────────────────────────────────
 
 browser.windows.onRemoved.addListener(async (windowId) => {
   // Handle default workspace window close
@@ -558,14 +564,14 @@ browser.windows.onRemoved.addListener(async (windowId) => {
   }
 });
 
-// ─── Badge při přepnutí okna ──────────────────────────────────────────────────
+// ─── Badge on window focus change ─────────────────────────────────────────────
 
 browser.windows.onFocusChanged.addListener(async (windowId) => {
   if (windowId === browser.windows.WINDOW_ID_NONE) return;
   await updateBadge(windowId).catch(() => {});
 });
 
-// ─── Automatické přiřazení kontejneru při otevření nového tabu + snapshot ────
+// ─── Automatic container assignment on new tab creation + snapshot ───────────
 
 // tabId → { windowId, cookieStoreId, wsName, wsColor, wsIcon, timeoutId }
 // Tabs parked here are awaiting URL resolution before being reassigned to a container.
@@ -611,6 +617,9 @@ async function resolveContainerForWindow(windowId) {
   return container;
 }
 
+// We intercept tab creation to ensure all tabs opened in a workspace window are assigned
+// to the correct Firefox Container (contextual identity), maintaining isolation between
+// workspaces. Tabs opened in non-workspace windows are not affected.
 browser.tabs.onCreated.addListener(async (tab) => {
   // Ignore replacement tabs we created ourselves
   if (pendingTabs.has(tab.id)) return;
@@ -626,8 +635,11 @@ browser.tabs.onCreated.addListener(async (tab) => {
       return;
     }
 
-    // Park the tab, then poll after 50ms: if still about:blank it's a plain new tab,
-    // if a real URL arrived it's from an external app. onUpdated is kept as fallback.
+    // Defer reassignment by 50ms: Firefox creates tabs with about:blank initially and
+    // sets the real URL shortly after (e.g. when an external application opens a URL in
+    // Firefox). Polling with tabs.get() lets us distinguish a plain new tab (still
+    // about:blank) from an externally-opened URL without waiting a full 2 seconds.
+    // The onUpdated listener below is kept as a fallback for slower systems.
     console.log("Parkuji tab, čekám na URL:", tab.id);
     const timeoutId = setTimeout(async () => {
       if (!pendingTabs.has(tab.id)) return;
@@ -663,10 +675,11 @@ browser.tabs.onCreated.addListener(async (tab) => {
   }
 });
 
-// ─── Agresivní snapshot při změnách tabů ─────────────────────────────────────
+// ─── Aggressive snapshotting on tab changes ──────────────────────────────────
 
 browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  // Handle pending tabs waiting for their real URL
+  // Fallback for the 50ms poll in onCreated: catches URLs that arrive later via the
+  // onUpdated event on slower systems where 50ms was not enough.
   if (pendingTabs.has(tabId)) {
     const { windowId, cookieStoreId } = pendingTabs.get(tabId);
 
@@ -702,7 +715,8 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 browser.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
-  // Clean up if the user closed a parked tab before its URL arrived
+  // Clean up pendingTabs to prevent memory leaks if the user closes a tab before
+  // the 50ms poll fires (tab is gone, no reassignment needed).
   removePending(tabId);
 
   await new Promise(r => setTimeout(r, 200));
