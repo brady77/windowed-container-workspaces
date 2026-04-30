@@ -118,6 +118,90 @@ section {
 
 #import-file { display: none; }
 
+/* ─── Device name row ────────────────────────────────────────────────────────── */
+
+.device-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.device-name-input {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 10px;
+  outline: none;
+  transition: border-color .15s;
+}
+.device-name-input:focus { border-color: var(--accent); }
+.device-name-input::placeholder { color: var(--text-dim); }
+
+.btn-save-name {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all .15s;
+}
+.btn-save-name:hover { color: var(--success); border-color: var(--success); }
+
+/* ─── Other-devices section ──────────────────────────────────────────────────── */
+
+.device-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+.device-item:last-child { border-bottom: none; }
+
+.device-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.device-item-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.device-item-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.btn-pull {
+  flex-shrink: 0;
+  margin-left: 10px;
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-pull:hover { color: var(--text); border-color: var(--accent); }
+
 /* ─── Buttons ────────────────────────────────────────────────────────────────── */
 
 .btn-primary, .btn-secondary {

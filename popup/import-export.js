@@ -19,6 +19,84 @@ function showStatus(msg, type) {
   el.className = `status ${type}`;
 }
 
+// ─── Device section ───────────────────────────────────────────────────────────
+
+async function loadDeviceSection() {
+  let result;
+  try {
+    result = await send("GET_DEVICES");
+  } catch (e) {
+    return;
+  }
+
+  const { self, others } = result;
+  const input = document.getElementById("input-device-name");
+  if (self && self.deviceName) input.value = self.deviceName;
+
+  if (others && others.length > 0) {
+    renderDeviceList(others);
+    document.getElementById("other-devices-section").classList.remove("hidden");
+  }
+}
+
+function renderDeviceList(devices) {
+  const list = document.getElementById("device-list");
+  list.innerHTML = "";
+
+  devices.forEach((device, idx) => {
+    const item = document.createElement("div");
+    item.className = "device-item";
+
+    const info = document.createElement("div");
+    info.className = "device-item-info";
+
+    const name = document.createElement("span");
+    name.className = "device-item-name";
+    name.textContent = device.deviceName || ("Device " + device.deviceId.slice(0, 6));
+
+    const meta = document.createElement("span");
+    meta.className = "device-item-meta";
+    const n = (device.workspaces || []).length;
+    meta.textContent = `${n} workspace${n !== 1 ? "s" : ""}`;
+
+    info.appendChild(name);
+    info.appendChild(meta);
+
+    const pullBtn = document.createElement("button");
+    pullBtn.className = "btn-pull";
+    pullBtn.textContent = "Pull…";
+    pullBtn.addEventListener("click", () => startDevicePull(device));
+
+    item.appendChild(info);
+    item.appendChild(pullBtn);
+    list.appendChild(item);
+  });
+}
+
+function startDevicePull(device) {
+  const workspaces = device.workspaces || [];
+  if (workspaces.length === 0) return;
+
+  backupWorkspaces = workspaces;
+  const label = device.deviceName || ("Device " + device.deviceId.slice(0, 6));
+  document.getElementById("panel-review-title").textContent = "Pull from " + label;
+  renderReviewPanel(backupWorkspaces);
+  showPanel("panel-review");
+}
+
+document.getElementById("btn-save-device-name").addEventListener("click", async () => {
+  const name = document.getElementById("input-device-name").value.trim();
+  if (!name) return;
+  await send("SET_DEVICE_NAME", { name });
+  const btn = document.getElementById("btn-save-device-name");
+  btn.style.color = "var(--success)";
+  setTimeout(() => { btn.style.color = ""; }, 1200);
+});
+
+document.getElementById("input-device-name").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") document.getElementById("btn-save-device-name").click();
+});
+
 // ─── Export ───────────────────────────────────────────────────────────────────
 
 document.getElementById("btn-export").addEventListener("click", async () => {
@@ -58,13 +136,12 @@ document.getElementById("import-file").addEventListener("change", async (e) => {
     return;
   }
 
+  document.getElementById("panel-review-title").textContent = "Restore from backup";
   renderReviewPanel(backupWorkspaces);
   showPanel("panel-review");
 });
 
 // ─── Review panel rendering ───────────────────────────────────────────────────
-// These functions are designed to be reusable for the future "Pull from device"
-// feature (Feature 1) — they accept a generic workspaces array.
 
 function renderReviewPanel(workspaces) {
   const list = document.getElementById("review-list");
@@ -72,6 +149,8 @@ function renderReviewPanel(workspaces) {
 
   workspaces.forEach((ws, wsIdx) => {
     const tabs = ws.tabs || [];
+    // Support both new format (ws.wsName) and old backup format (ws.name)
+    const displayName = ws.wsName || ws.name || "(unnamed)";
 
     // ── Workspace block ──────────────────────────────────────────────────────
     const block = document.createElement("div");
@@ -83,7 +162,7 @@ function renderReviewPanel(workspaces) {
 
     const nameEl = document.createElement("span");
     nameEl.className = "review-ws-name";
-    nameEl.textContent = ws.name;
+    nameEl.textContent = displayName;
 
     const allLabel = document.createElement("label");
     allLabel.className = "select-all-label";
@@ -191,7 +270,6 @@ document.getElementById("btn-restore").addEventListener("click", async () => {
   if (result && result.error) {
     btn.textContent = "Restore selected";
     btn.disabled = false;
-    // Show error inline above footer
     let errEl = document.getElementById("review-error");
     if (!errEl) {
       errEl = document.createElement("div");
@@ -209,8 +287,8 @@ document.getElementById("btn-restore").addEventListener("click", async () => {
 });
 
 // Collects checked tabs from the review list into a SELECTIVE_IMPORT payload.
-// wsColor / wsIcon are passed so the backend can create a container if the workspace
-// doesn't exist locally. Designed to be called the same way for device pull (Feature 1).
+// wsName / wsColor are passed so the background can create a container if the workspace
+// doesn't exist locally. Works identically for file import and device pull.
 function buildPayload() {
   const list = document.getElementById("review-list");
   const addTabs = [];
@@ -219,9 +297,8 @@ function buildPayload() {
     const checked = [...list.querySelectorAll(`.cb-tab[data-ws-idx="${wsIdx}"]:checked`)];
     if (checked.length === 0) return;
     addTabs.push({
-      wsName:  ws.name,
-      wsColor: ws.color  || "blue",
-      wsIcon:  ws.icon   || "circle",
+      wsName:  ws.wsName  || ws.name  || "",
+      wsColor: ws.color   || "blue",
       tabs: checked.map(cb => (ws.tabs || [])[parseInt(cb.dataset.tabIdx)])
     });
   });
@@ -256,3 +333,7 @@ document.getElementById("btn-result-close").addEventListener("click", () => wind
 // ─── Shared close button ──────────────────────────────────────────────────────
 
 document.getElementById("btn-close").addEventListener("click", () => window.close());
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+
+loadDeviceSection();

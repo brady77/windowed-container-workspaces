@@ -20,6 +20,23 @@
     <!-- ── Panel: Export / Import (default) ────────────────────────────────── -->
     <div id="panel-main" class="panel">
 
+      <!-- ── This device ── -->
+      <section>
+        <div class="section-label">This device</div>
+        <div class="device-name-row">
+          <input type="text" id="input-device-name" class="device-name-input"
+                 placeholder="Device name…" maxlength="40" autocomplete="off" />
+          <button id="btn-save-device-name" class="btn-save-name" title="Save name">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          </button>
+        </div>
+      </section>
+
+      <div class="divider"></div>
+
+      <!-- ── Export ── -->
       <section>
         <div class="section-label">Export</div>
         <p class="section-desc">Download all workspaces as a JSON backup file.</p>
@@ -35,6 +52,7 @@
 
       <div class="divider"></div>
 
+      <!-- ── Import ── -->
       <section>
         <div class="section-label">Import</div>
         <p class="section-desc">Select a backup file to review and restore workspaces.</p>
@@ -51,12 +69,21 @@
 
       <div id="status" class="status"></div>
 
+      <!-- ── Other devices (shown only when synced devices exist) ── -->
+      <div id="other-devices-section" class="hidden">
+        <div class="divider"></div>
+        <section>
+          <div class="section-label">Other devices</div>
+          <div id="device-list"></div>
+        </section>
+      </div>
+
     </div>
 
-    <!-- ── Panel: Review backup before restoring ────────────────────────────── -->
+    <!-- ── Panel: Review before restoring / pulling ─────────────────────────── -->
     <div id="panel-review" class="panel hidden">
 
-      <div class="panel-subheader">Restore from backup</div>
+      <div id="panel-review-title" class="panel-subheader">Restore from backup</div>
 
       <div id="review-list" class="review-list"></div>
 
