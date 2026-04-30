@@ -66,6 +66,14 @@ header {
   text-transform: uppercase;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#import-file { display: none; }
+
 .btn-icon {
   width: 28px; height: 28px;
   display: flex; align-items: center; justify-content: center;
@@ -368,3 +376,26 @@ input[type="text"]::placeholder { color: var(--text-dim); opacity: .5; }
 /* ─── Storage size indicator ─────────────────────────────────────────────── */
 .size-warning { color: #f97316; }
 .size-danger  { color: var(--danger); }
+
+/* ─── Toast notification ─────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-size: 12px;
+  padding: 7px 14px;
+  border-radius: var(--radius);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s, transform .2s;
+  white-space: nowrap;
+  z-index: 200;
+}
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

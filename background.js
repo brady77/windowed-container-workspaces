@@ -473,6 +473,36 @@ async function handleRenameWorkspace({ id, name }) {
   return ws;
 }
 
+async function handleExportWorkspaces() {
+  const allSync = await browser.storage.sync.get(null);
+  const workspaces = [];
+  for (const [key, val] of Object.entries(allSync)) {
+    if (key.startsWith(SYNC_PREFIX)) {
+      const ws = decompressWs(val);
+      if (ws) {
+        const { windowId, ...exportWs } = ws;
+        workspaces.push(exportWs);
+      }
+    }
+  }
+  return { version: "1.0", exported_at: new Date().toISOString(), workspaces };
+}
+
+async function handleImportWorkspaces({ data }) {
+  if (!data || !Array.isArray(data.workspaces)) throw new Error("Invalid import format");
+  let imported = 0;
+  for (const ws of data.workspaces) {
+    try {
+      const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
+      await saveWorkspace({ ...ws, cookieStoreId: container.cookieStoreId, windowId: null });
+      imported++;
+    } catch (e) {
+      console.error("Failed to import workspace:", ws.name, e);
+    }
+  }
+  return { imported };
+}
+
 async function handleGetWsSize({ id }) {
   const bytes = await browser.storage.sync.getBytesInUse("wcw_ws_" + id);
   return { bytes };
@@ -526,6 +556,8 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case "HIBERNATE_WORKSPACE": handler = () => handleHibernateWorkspace(msg.payload); break;
     case "DELETE_WORKSPACE":    handler = () => handleDeleteWorkspace(msg.payload); break;
     case "RENAME_WORKSPACE":    handler = () => handleRenameWorkspace(msg.payload); break;
+    case "EXPORT_WORKSPACES":   handler = handleExportWorkspaces; break;
+    case "IMPORT_WORKSPACES":   handler = () => handleImportWorkspaces(msg.payload); break;
     default:
       sendResponse({ error: "Unknown message type: " + msg.type });
       return false;
