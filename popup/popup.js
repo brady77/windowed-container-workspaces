@@ -331,8 +331,7 @@ function openImportExportPage() {
   window.close();
 }
 
-document.getElementById("btn-export").addEventListener("click", openImportExportPage);
-document.getElementById("btn-import").addEventListener("click", openImportExportPage);
+document.getElementById("btn-backup").addEventListener("click", openImportExportPage);
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
