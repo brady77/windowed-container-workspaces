@@ -207,6 +207,7 @@ async function saveWorkspace(ws) {
   const wsData = { ...ws };
   delete wsData.windowId; // never persist runtime window reference
   wsData.updatedAt = Date.now();
+  wsData.deviceName = await getOrCreateDeviceName(deviceId);
 
   try {
     await browser.storage.sync.set({
@@ -771,7 +772,10 @@ async function handleGetDevices() {
     if (dId === deviceId) continue; // skip own keys
     if (!devices[dId]) devices[dId] = { deviceId: dId, deviceName: "Device " + dId, workspaces: [] };
     const ws = decompressWs(val);
-    if (ws) devices[dId].workspaces.push(ws);
+    if (ws) {
+      if (ws.deviceName) devices[dId].deviceName = ws.deviceName;
+      devices[dId].workspaces.push(ws);
+    }
   }
 
   return {
