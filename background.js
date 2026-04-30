@@ -113,118 +113,195 @@ const LZString = (() => {
   };
 })();
 
-// ─── Storage layer with sync support ─────────────────────────────────────────
-// Each workspace is stored as a separate key "ws_{id}" in storage.sync
-// (for merge support). windowId is stored only in storage.local (it is device-local).
+// ─── Storage constants ────────────────────────────────────────────────────────
+// Per-device snapshot keys in storage.sync: wcw_snap_{deviceId}_{encodedWsName}
+// windowId is never persisted — it lives only in storage.local keyed by wsName.
 
-const SYNC_PREFIX = "wcw_ws_";   // prefix pro sync klíče
-const LOCAL_WINS  = "wcw_wins";  // lokální mapa windowId: { wsId: windowId }
+const SNAP_PREFIX       = "wcw_snap_";       // sync key prefix
+const LOCAL_WINS        = "wcw_wins";        // local: { wsName → windowId }
+const LOCAL_DEVICE_ID   = "wcw_device_id";   // local: stable device identifier
+const LOCAL_DEVICE_NAME = "wcw_device_name"; // local: human-readable device label
 
-const DEFAULT_WORKSPACE_ID = "ws_default";
+const DEFAULT_WORKSPACE_ID = "ws_default"; // virtual default (no container) workspace
+const DEFAULT_ICON         = "fingerprint"; // Firefox container icon for all new containers
 
-function compressWs(ws) {
-  // Strip windowId before saving to sync (it is device-local)
-  const { windowId, ...syncData } = ws;
-  return LZString.compress(JSON.stringify(syncData));
+// ─── Device identity ──────────────────────────────────────────────────────────
+
+function snapKey(deviceId, wsName) {
+  return SNAP_PREFIX + deviceId + "_" + encodeURIComponent(wsName);
+}
+
+let _cachedDeviceId = null;
+
+async function getOrCreateDeviceId() {
+  const local = await browser.storage.local.get(LOCAL_DEVICE_ID);
+  if (local[LOCAL_DEVICE_ID]) return local[LOCAL_DEVICE_ID];
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  await browser.storage.local.set({ [LOCAL_DEVICE_ID]: id });
+  return id;
+}
+
+async function myDeviceId() {
+  if (!_cachedDeviceId) _cachedDeviceId = await getOrCreateDeviceId();
+  return _cachedDeviceId;
+}
+
+async function getOrCreateDeviceName(deviceId) {
+  const local = await browser.storage.local.get(LOCAL_DEVICE_NAME);
+  if (local[LOCAL_DEVICE_NAME]) return local[LOCAL_DEVICE_NAME];
+  const name = "Device " + deviceId.slice(0, 6);
+  await browser.storage.local.set({ [LOCAL_DEVICE_NAME]: name });
+  return name;
+}
+
+// ─── Compression helpers ──────────────────────────────────────────────────────
+
+function compressWs(wsData) {
+  // Workspace data is compressed with LZString before storing to stay within Firefox
+  // sync's 8 KB per-key limit. Compression typically reduces payload size by 60–70%.
+  return LZString.compress(JSON.stringify(wsData));
 }
 
 function decompressWs(compressed) {
   try {
     return JSON.parse(LZString.decompress(compressed));
   } catch (e) {
-    console.error("Chyba dekomprese workspace:", e);
+    console.error("Workspace decompression error:", e);
     return null;
   }
 }
 
+// ─── Storage layer ────────────────────────────────────────────────────────────
+
 async function loadWorkspaces() {
-  // Load all sync keys with the prefix
-  let syncData = {};
+  const deviceId = await myDeviceId();
+  const prefix = snapKey(deviceId, ""); // "wcw_snap_{deviceId}_"
+
+  let result = {};
   try {
     const allSync = await browser.storage.sync.get(null);
     for (const [key, val] of Object.entries(allSync)) {
-      if (key.startsWith(SYNC_PREFIX)) {
+      if (key.startsWith(prefix)) {
         const ws = decompressWs(val);
-        if (ws) syncData[ws.id] = ws;
+        if (ws && ws.wsName) result[ws.wsName] = ws;
       }
     }
   } catch (e) {
-    console.warn("storage.sync nedostupný, používám local:", e.message);
+    console.warn("storage.sync unavailable, using local fallback:", e.message);
     const local = await browser.storage.local.get("workspaces");
-    syncData = local.workspaces || {};
+    result = local.workspaces || {};
   }
 
-  // Attach device-local windowId to each workspace
+  // Attach device-local windowId (never stored in sync)
   const localWins = await browser.storage.local.get(LOCAL_WINS);
   const wins = localWins[LOCAL_WINS] || {};
-  for (const ws of Object.values(syncData)) {
-    ws.windowId = wins[ws.id] || null;
+  for (const ws of Object.values(result)) {
+    ws.windowId = wins[ws.wsName] || null;
   }
 
-  return syncData;
+  return result;
 }
 
 async function saveWorkspace(ws) {
-  const { windowId, ...syncData } = ws;
+  const deviceId = await myDeviceId();
+  const wsData = { ...ws };
+  delete wsData.windowId; // never persist runtime window reference
+  wsData.updatedAt = Date.now();
 
-  // Workspace data is compressed with LZString before storing to stay within Firefox
-  // Sync's 8 KB per-key limit. Compression typically reduces payload size by 60–70%.
-  // Save to sync (without windowId)
   try {
     await browser.storage.sync.set({
-      [SYNC_PREFIX + ws.id]: compressWs(ws)
+      [snapKey(deviceId, ws.wsName)]: compressWs(wsData)
     });
   } catch (e) {
-    console.warn("storage.sync zápis selhal, ukládám do local:", e.message);
-    const local = await browser.storage.local.get("workspaces");
-    const workspaces = local.workspaces || {};
-    workspaces[ws.id] = ws;
-    await browser.storage.local.set({ workspaces });
+    console.warn("storage.sync write failed:", e.message);
   }
 }
 
-async function saveWindowId(wsId, windowId) {
+async function saveWindowId(wsName, windowId) {
   const localWins = await browser.storage.local.get(LOCAL_WINS);
   const wins = localWins[LOCAL_WINS] || {};
   if (windowId === null) {
-    delete wins[wsId];
+    delete wins[wsName];
   } else {
-    wins[wsId] = windowId;
+    wins[wsName] = windowId;
   }
   await browser.storage.local.set({ [LOCAL_WINS]: wins });
 }
 
-async function deleteWorkspaceFromSync(wsId) {
+async function deleteWorkspaceFromSync(wsName) {
+  const deviceId = await myDeviceId();
   try {
-    await browser.storage.sync.remove(SYNC_PREFIX + wsId);
+    await browser.storage.sync.remove(snapKey(deviceId, wsName));
   } catch (e) {
-    console.warn("storage.sync mazání selhalo:", e.message);
+    console.warn("storage.sync delete failed:", e.message);
   }
-  await saveWindowId(wsId, null);
-  // Fallback: odstraň i z local pokud tam je
-  const local = await browser.storage.local.get("workspaces");
-  if (local.workspaces && local.workspaces[wsId]) {
-    delete local.workspaces[wsId];
-    await browser.storage.local.set({ workspaces: local.workspaces });
+  await saveWindowId(wsName, null);
+}
+
+// ─── Migration from legacy format ─────────────────────────────────────────────
+// Reads old wcw_ws_* keys, converts them to per-device wcw_snap_* format, then
+// removes the old keys. Runs once on startup; no-op when no legacy keys exist.
+
+async function migrateFromLegacy() {
+  const LEGACY_PREFIX = "wcw_ws_";
+  let allSync;
+  try {
+    allSync = await browser.storage.sync.get(null);
+  } catch (e) {
+    return;
+  }
+  const legacyKeys = Object.keys(allSync).filter(k => k.startsWith(LEGACY_PREFIX));
+  if (legacyKeys.length === 0) return;
+
+  const deviceId = await myDeviceId();
+  console.log("Migrating", legacyKeys.length, "legacy workspace(s) to per-device format.");
+
+  for (const key of legacyKeys) {
+    try {
+      const old = decompressWs(allSync[key]);
+      if (!old || !old.name) continue;
+      const newWs = {
+        wsName:    old.name,
+        color:     old.color || "blue",
+        icon:      old.icon  || DEFAULT_ICON,
+        deviceId,
+        updatedAt: old.createdAt || Date.now(),
+        tabs:      old.tabs || []
+      };
+      await browser.storage.sync.set({ [snapKey(deviceId, old.name)]: compressWs(newWs) });
+      await browser.storage.sync.remove(key);
+      console.log("Migrated workspace:", old.name);
+    } catch (e) {
+      console.error("Migration failed for key:", key, e.message);
+    }
   }
 }
 
-async function saveWorkspaces(workspaces) {
-  // Hromadné uložení – použijeme pro zpětnou kompatibilitu
-  for (const ws of Object.values(workspaces)) {
-    await saveWorkspace(ws);
-  }
+// ─── Snapshot debounce ────────────────────────────────────────────────────────
+// Tab events fire very frequently during active browsing. To avoid flooding
+// storage.sync, snapshot writes triggered by tab listeners are debounced by 60 s.
+// Explicit user actions (open, hibernate, rename, delete) always write immediately.
+
+const snapshotTimers = new Map(); // wsName → timeoutId
+
+function scheduleSnapshot(ws) {
+  const prev = snapshotTimers.get(ws.wsName);
+  if (prev) clearTimeout(prev);
+  const timer = setTimeout(async () => {
+    snapshotTimers.delete(ws.wsName);
+    await saveWorkspace(ws).catch(e => console.error("Deferred snapshot save failed:", e));
+  }, 60000);
+  snapshotTimers.set(ws.wsName, timer);
 }
 
 // ─── Container helpers ────────────────────────────────────────────────────────
 
 async function findOrCreateContainer(name, color, icon) {
-  // Always resolve by name, not by stored cookieStoreId: cookieStoreId values are
-  // assigned locally by Firefox and differ between devices when using Firefox Sync.
-  // The container name is the stable cross-device identifier.
+  // Always resolve by name, not by cookieStoreId: IDs are assigned locally by Firefox
+  // and differ between devices even when synced through Firefox Sync.
   const existing = await browser.contextualIdentities.query({ name });
   if (existing && existing.length > 0) {
-    console.log("Nalezen existující kontejner:", name, existing[0].cookieStoreId);
+    console.log("Found existing container:", name, existing[0].cookieStoreId);
     return existing[0];
   }
   return await browser.contextualIdentities.create({ name, color, icon });
@@ -240,13 +317,13 @@ async function deleteContainer(cookieStoreId) {
 
 // ─── Window helpers ───────────────────────────────────────────────────────────
 
-async function openWorkspaceWindow(workspace) {
+async function openWorkspaceWindow(workspace, cookieStoreId) {
   const urls = workspace.tabs.length > 0
     ? workspace.tabs.map(t => t.url)
     : ["about:blank"];
 
   const win = await browser.windows.create({});
-  console.log("Okno vytvoreno:", win.id);
+  console.log("Window created:", win.id);
 
   const defaultTabs = await browser.tabs.query({ windowId: win.id });
 
@@ -255,10 +332,10 @@ async function openWorkspaceWindow(workspace) {
     const tab = await browser.tabs.create({
       windowId: win.id,
       url: urls[i],
-      cookieStoreId: workspace.cookieStoreId,
+      cookieStoreId,
       active: i === 0
     });
-    console.log("Tab vytvoren:", tab.id, "cookieStoreId:", tab.cookieStoreId);
+    console.log("Tab created:", tab.id, "cookieStoreId:", tab.cookieStoreId);
     createdTabs.push(tab);
   }
 
@@ -287,10 +364,10 @@ async function openWorkspaceWindow(workspace) {
         color: info.color || "blue",
         collapsed: info.collapsed || false
       });
-      console.log("Skupina obnovena:", info.title, "tabů:", tabIds.length);
+      console.log("Group restored:", info.title, "tabs:", tabIds.length);
     }
   } catch (e) {
-    console.warn("Obnova skupin selhala:", e.message);
+    console.warn("Group restore failed:", e.message);
   }
 
   // Close the default blank tab opened automatically by browser.windows.create
@@ -319,29 +396,31 @@ async function snapshotWindow(windowId) {
 // ─── Handlers ────────────────────────────────────────────────────────────────
 
 async function handleCreateWorkspace({ name, color, icon }) {
-  // Check for duplicate name
   const workspaces = await loadWorkspaces();
-  const duplicate = Object.values(workspaces).find(w => w.name.toLowerCase() === name.toLowerCase());
-  if (duplicate) throw new Error("Workspace s tímto názvem již existuje.");
+  const duplicate = Object.values(workspaces).find(w => w.wsName.toLowerCase() === name.toLowerCase());
+  if (duplicate) throw new Error("A workspace with this name already exists.");
 
-  const container = await findOrCreateContainer(name, color, icon);
-  const id = `ws_${Date.now()}`;
+  const deviceId = await myDeviceId();
+  // Container is always created with DEFAULT_ICON for cross-device consistency.
+  // cookieStoreId is never stored — resolved by name on each device at runtime.
+  await findOrCreateContainer(name, color || "blue", DEFAULT_ICON);
 
   const ws = {
-    id, name, color, icon,
-    cookieStoreId: container.cookieStoreId,
-    windowId: null,
-    tabs: [],
-    createdAt: Date.now()
+    wsName:    name,
+    color:     color || "blue",
+    icon:      icon  || DEFAULT_ICON,
+    deviceId,
+    updatedAt: Date.now(),
+    tabs:      []
   };
 
   await saveWorkspace(ws);
-  console.log("Workspace vytvoren:", id, "cookieStoreId:", container.cookieStoreId);
+  console.log("Workspace created:", name);
   return ws;
 }
 
-async function handleOpenWorkspace({ id }) {
-  if (id === DEFAULT_WORKSPACE_ID) {
+async function handleOpenWorkspace({ name }) {
+  if (name === DEFAULT_WORKSPACE_ID) {
     const localWins = await browser.storage.local.get(LOCAL_WINS);
     const winsMap = localWins[LOCAL_WINS] || {};
     let windowId = winsMap[DEFAULT_WORKSPACE_ID] || null;
@@ -353,7 +432,6 @@ async function handleOpenWorkspace({ id }) {
         console.log("Default workspace window gone, opening new");
       }
     }
-    // Focus an existing unassigned window if one exists
     const allWins = await browser.windows.getAll({ populate: false });
     const assignedIds = new Set(Object.values(winsMap));
     const unassigned = allWins.filter(w => !assignedIds.has(w.id));
@@ -372,40 +450,34 @@ async function handleOpenWorkspace({ id }) {
   }
 
   const workspaces = await loadWorkspaces();
-  const ws = workspaces[id];
-  if (!ws) throw new Error("Workspace not found: " + id);
+  const ws = workspaces[name];
+  if (!ws) throw new Error("Workspace not found: " + name);
 
-  console.log("Oteviram workspace:", ws.name, "cookieStoreId:", ws.cookieStoreId);
+  console.log("Opening workspace:", ws.wsName);
 
-  // Always resolve container by name (cookieStoreId differs between devices)
-  const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
-  if (container.cookieStoreId !== ws.cookieStoreId) {
-    console.log("cookieStoreId aktualizováno pro:", ws.name, "->", container.cookieStoreId);
-    ws.cookieStoreId = container.cookieStoreId;
-    await saveWorkspace(ws);
-  }
+  // Container resolved by name — cookieStoreId differs between devices
+  const container = await findOrCreateContainer(ws.wsName, ws.color, DEFAULT_ICON);
 
-  // If the window is already open, just focus it
   if (ws.windowId !== null) {
     try {
       await browser.windows.update(ws.windowId, { focused: true });
       return { windowId: ws.windowId };
     } catch (e) {
-      console.log("Okno neexistuje, otviram nove");
+      console.log("Window gone, opening new");
     }
   }
 
-  const windowId = await openWorkspaceWindow(ws);
+  const windowId = await openWorkspaceWindow(ws, container.cookieStoreId);
   ws.windowId = windowId;
   ws.tabs = [];
   await saveWorkspace(ws);
-  await saveWindowId(id, windowId);
+  await saveWindowId(ws.wsName, windowId);
   await refreshAllBadges();
   return { windowId };
 }
 
-async function handleHibernateWorkspace({ id }) {
-  if (id === DEFAULT_WORKSPACE_ID) {
+async function handleHibernateWorkspace({ name }) {
+  if (name === DEFAULT_WORKSPACE_ID) {
     const localWins = await browser.storage.local.get(LOCAL_WINS);
     const winsMap = localWins[LOCAL_WINS] || {};
     const windowId = winsMap[DEFAULT_WORKSPACE_ID] || null;
@@ -418,8 +490,8 @@ async function handleHibernateWorkspace({ id }) {
   }
 
   const workspaces = await loadWorkspaces();
-  const ws = workspaces[id];
-  if (!ws) throw new Error("Workspace not found: " + id);
+  const ws = workspaces[name];
+  if (!ws) throw new Error("Workspace not found: " + name);
 
   if (ws.windowId !== null) {
     const windowId = ws.windowId;
@@ -427,12 +499,12 @@ async function handleHibernateWorkspace({ id }) {
     ws.tabs = snapshot.length > 0 ? snapshot : ws.tabs;
     ws.windowId = null;
     await saveWorkspace(ws);
-    await saveWindowId(id, null);
+    await saveWindowId(ws.wsName, null);
 
     try {
       await browser.windows.remove(windowId);
     } catch (e) {
-      console.warn("Okno uz bylo zavreno:", e);
+      console.warn("Window already closed:", e);
     }
     await refreshAllBadges();
   }
@@ -440,70 +512,74 @@ async function handleHibernateWorkspace({ id }) {
   return ws;
 }
 
-async function handleDeleteWorkspace({ id }) {
+async function handleDeleteWorkspace({ name }) {
   const workspaces = await loadWorkspaces();
-  const ws = workspaces[id];
-  if (!ws) throw new Error("Workspace not found: " + id);
+  const ws = workspaces[name];
+  if (!ws) throw new Error("Workspace not found: " + name);
 
   if (ws.windowId !== null) {
     try { await browser.windows.remove(ws.windowId); } catch (e) {}
   }
 
-  const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
-  await deleteContainer(container.cookieStoreId);
-  await deleteWorkspaceFromSync(id);
-  console.log("Workspace smazan:", id);
+  const existing = await browser.contextualIdentities.query({ name: ws.wsName });
+  if (existing && existing.length > 0) {
+    await deleteContainer(existing[0].cookieStoreId);
+  }
+
+  await deleteWorkspaceFromSync(ws.wsName);
+  console.log("Workspace deleted:", name);
   return { ok: true };
 }
 
-async function handleRenameWorkspace({ id, name }) {
+async function handleRenameWorkspace({ oldName, newName }) {
   const workspaces = await loadWorkspaces();
-  const ws = workspaces[id];
-  if (!ws) throw new Error("Workspace not found: " + id);
+  const ws = workspaces[oldName];
+  if (!ws) throw new Error("Workspace not found: " + oldName);
 
-  // Check for duplicate name
-  const duplicate = Object.values(workspaces).find(w => w.id !== id && w.name.toLowerCase() === name.toLowerCase());
-  if (duplicate) throw new Error("Workspace s tímto názvem již existuje.");
+  const duplicate = Object.values(workspaces).find(
+    w => w.wsName !== oldName && w.wsName.toLowerCase() === newName.toLowerCase()
+  );
+  if (duplicate) throw new Error("A workspace with this name already exists.");
 
-  // Resolve by old name before renaming (cookieStoreId may be stale on this device)
-  const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
-  ws.name = name;
-  await browser.contextualIdentities.update(container.cookieStoreId, { name });
-  await saveWorkspace(ws);
-  return ws;
+  // Rename the Firefox container before updating our records
+  const existing = await browser.contextualIdentities.query({ name: oldName });
+  if (existing && existing.length > 0) {
+    await browser.contextualIdentities.update(existing[0].cookieStoreId, { name: newName });
+  }
+
+  // Write new snap key, delete old
+  const newWs = { ...ws, wsName: newName };
+  await saveWorkspace(newWs);
+  const deviceId = await myDeviceId();
+  await browser.storage.sync.remove(snapKey(deviceId, oldName));
+
+  // Update local windowId mapping if this workspace has a window open
+  const localWins = await browser.storage.local.get(LOCAL_WINS);
+  const wins = localWins[LOCAL_WINS] || {};
+  if (wins[oldName] !== undefined) {
+    wins[newName] = wins[oldName];
+    delete wins[oldName];
+    await browser.storage.local.set({ [LOCAL_WINS]: wins });
+  }
+
+  return newWs;
 }
 
 async function handleExportWorkspaces() {
+  const deviceId = await myDeviceId();
+  const prefix = snapKey(deviceId, "");
   const allSync = await browser.storage.sync.get(null);
   const workspaces = [];
   for (const [key, val] of Object.entries(allSync)) {
-    if (key.startsWith(SYNC_PREFIX)) {
+    if (key.startsWith(prefix)) {
       const ws = decompressWs(val);
-      if (ws) {
-        const { windowId, ...exportWs } = ws;
-        workspaces.push(exportWs);
-      }
+      if (ws) workspaces.push(ws);
     }
   }
-  return { version: "1.0", exported_at: new Date().toISOString(), workspaces };
+  return { version: "2.0", exported_at: new Date().toISOString(), workspaces };
 }
 
-async function handleImportWorkspaces({ data }) {
-  if (!data || !Array.isArray(data.workspaces)) throw new Error("Invalid import format");
-  let imported = 0;
-  for (const ws of data.workspaces) {
-    try {
-      const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
-      await saveWorkspace({ ...ws, cookieStoreId: container.cookieStoreId, windowId: null });
-      imported++;
-    } catch (e) {
-      console.error("Failed to import workspace:", ws.name, e);
-    }
-  }
-  return { imported };
-}
-
-// Returns the backup JSON structured for the UI. No comparison with local state.
+// Returns the backup data structured for the review UI. No comparison with local state.
 async function handleAnalyzeImport({ data }) {
   if (!data || !Array.isArray(data.workspaces)) throw new Error("Invalid backup format");
   return { workspaces: data.workspaces };
@@ -545,29 +621,29 @@ async function handleSelectiveImport({ create, addTabs }) {
   let tabsAdded = 0;
   const hibernatedNames = [];
 
-  // Phase 1: create explicitly listed workspace shells (usually [])
+  // Phase 1: create explicitly listed workspace shells (usually empty in current UI)
   for (const ws of (create || [])) {
     try {
-      await handleCreateWorkspace({ name: ws.name, color: ws.color || "blue", icon: ws.icon || "circle" });
+      await handleCreateWorkspace({ name: ws.wsName || ws.name, color: ws.color || "blue" });
       createdCount++;
     } catch (e) {
-      console.warn("Could not pre-create workspace:", ws.name, e.message);
+      console.warn("Could not pre-create workspace:", ws.wsName || ws.name, e.message);
     }
   }
 
   // Phase 2: add tabs — find workspace by name, auto-creating if absent
   let workspaces = await loadWorkspaces();
-  const findByName = name => Object.values(workspaces).find(w => w.name.toLowerCase() === name.toLowerCase());
+  const findByName = name => Object.values(workspaces).find(w => w.wsName.toLowerCase() === name.toLowerCase());
 
   for (const entry of (addTabs || [])) {
-    const { wsName, wsColor, wsIcon, tabs } = entry;
+    const { wsName, wsColor, tabs } = entry;
     if (!tabs || tabs.length === 0) continue;
 
     let ws = findByName(wsName);
 
     if (!ws) {
       try {
-        await handleCreateWorkspace({ name: wsName, color: wsColor || "blue", icon: wsIcon || "circle" });
+        await handleCreateWorkspace({ name: wsName, color: wsColor || "blue" });
         createdCount++;
         workspaces = await loadWorkspaces();
         ws = findByName(wsName);
@@ -578,8 +654,7 @@ async function handleSelectiveImport({ create, addTabs }) {
     }
     if (!ws) continue;
 
-    const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
-    ws.cookieStoreId = container.cookieStoreId;
+    const container = await findOrCreateContainer(ws.wsName, ws.color, DEFAULT_ICON);
 
     if (ws.windowId !== null) {
       // Window is open: add tabs live with group handling
@@ -603,15 +678,16 @@ async function handleSelectiveImport({ create, addTabs }) {
         tabsAdded++;
       }
       await saveWorkspace(ws);
-      if (!hibernatedNames.includes(ws.name)) hibernatedNames.push(ws.name);
+      if (!hibernatedNames.includes(ws.wsName)) hibernatedNames.push(ws.wsName);
     }
   }
 
   return { created: createdCount, tabsAdded, hibernatedWorkspaces: hibernatedNames };
 }
 
-async function handleGetWsSize({ id }) {
-  const bytes = await browser.storage.sync.getBytesInUse("wcw_ws_" + id);
+async function handleGetWsSize({ name }) {
+  const deviceId = await myDeviceId();
+  const bytes = await browser.storage.sync.getBytesInUse(snapKey(deviceId, name));
   return { bytes };
 }
 
@@ -623,11 +699,11 @@ async function handleGetState() {
   for (const ws of Object.values(workspaces)) {
     if (ws.windowId !== null && !openIds.has(ws.windowId)) {
       ws.windowId = null;
-      await saveWindowId(ws.id, null);
+      await saveWindowId(ws.wsName, null);
     }
   }
 
-  // Inject virtual default workspace
+  // Inject virtual default workspace (no container, no sync key)
   const localWins = await browser.storage.local.get(LOCAL_WINS);
   const winsMap = localWins[LOCAL_WINS] || {};
   let defaultWindowId = winsMap[DEFAULT_WORKSPACE_ID] || null;
@@ -636,23 +712,49 @@ async function handleGetState() {
     await saveWindowId(DEFAULT_WORKSPACE_ID, null);
   }
   workspaces[DEFAULT_WORKSPACE_ID] = {
-    id: DEFAULT_WORKSPACE_ID,
-    name: "Default (no container)",
-    color: "gray",
-    icon: "circle",
-    cookieStoreId: "firefox-default",
-    windowId: defaultWindowId,
-    tabs: [],
-    createdAt: 0
+    wsName:    DEFAULT_WORKSPACE_ID,
+    color:     "gray",
+    windowId:  defaultWindowId,
+    tabs:      []
   };
 
   return workspaces;
 }
 
+async function handleGetDevices() {
+  const deviceId = await myDeviceId();
+  const deviceName = await getOrCreateDeviceName(deviceId);
+  const allSync = await browser.storage.sync.get(null);
+
+  const devices = {};
+  for (const [key, val] of Object.entries(allSync)) {
+    if (!key.startsWith(SNAP_PREFIX)) continue;
+    // Key format: wcw_snap_{deviceId}_{encodedWsName}
+    const rest = key.slice(SNAP_PREFIX.length);
+    const underIdx = rest.indexOf("_");
+    if (underIdx === -1) continue;
+    const dId = rest.slice(0, underIdx);
+    if (dId === deviceId) continue; // skip own keys
+    if (!devices[dId]) devices[dId] = { deviceId: dId, deviceName: "Device " + dId.slice(0, 6), workspaces: [] };
+    const ws = decompressWs(val);
+    if (ws) devices[dId].workspaces.push(ws);
+  }
+
+  return {
+    self:   { deviceId, deviceName },
+    others: Object.values(devices)
+  };
+}
+
+async function handleSetDeviceName({ name }) {
+  await browser.storage.local.set({ [LOCAL_DEVICE_NAME]: name });
+  return { ok: true };
+}
+
 // ─── Message router ───────────────────────────────────────────────────────────
 
 browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  console.log("Prijata zprava:", msg.type);
+  console.log("Message received:", msg.type);
 
   let handler;
   switch (msg.type) {
@@ -664,9 +766,10 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case "DELETE_WORKSPACE":    handler = () => handleDeleteWorkspace(msg.payload); break;
     case "RENAME_WORKSPACE":    handler = () => handleRenameWorkspace(msg.payload); break;
     case "EXPORT_WORKSPACES":   handler = handleExportWorkspaces; break;
-    case "IMPORT_WORKSPACES":   handler = () => handleImportWorkspaces(msg.payload); break;
     case "ANALYZE_IMPORT":      handler = () => handleAnalyzeImport(msg.payload); break;
     case "SELECTIVE_IMPORT":    handler = () => handleSelectiveImport(msg.payload); break;
+    case "GET_DEVICES":         handler = handleGetDevices; break;
+    case "SET_DEVICE_NAME":     handler = () => handleSetDeviceName(msg.payload); break;
     default:
       sendResponse({ error: "Unknown message type: " + msg.type });
       return false;
@@ -696,10 +799,11 @@ browser.windows.onRemoved.addListener(async (windowId) => {
   const workspaces = await loadWorkspaces();
   for (const ws of Object.values(workspaces)) {
     if (ws.windowId === windowId) {
+      // Window close writes immediately — user may not open Firefox again for a while
       ws.windowId = null;
       await saveWorkspace(ws);
-      await saveWindowId(ws.id, null);
-      console.log("Okno zavreno, workspace hibernovan:", ws.name);
+      await saveWindowId(ws.wsName, null);
+      console.log("Window closed, workspace hibernated:", ws.wsName);
       break;
     }
   }
@@ -714,7 +818,7 @@ browser.windows.onFocusChanged.addListener(async (windowId) => {
 
 // ─── Automatic container assignment on new tab creation + snapshot ───────────
 
-// tabId → { windowId, cookieStoreId, wsName, wsColor, wsIcon, timeoutId }
+// tabId → { windowId, cookieStoreId, timeoutId }
 // Tabs parked here are awaiting URL resolution before being reassigned to a container.
 // Also used as a guard to prevent re-triggering listeners on the replacement tab.
 const pendingTabs = new Map();
@@ -734,7 +838,7 @@ async function doReassign(tabId, windowId, cookieStoreId, url) {
     await browser.tabs.remove(tabId);
     await browser.tabs.create({ windowId, url, cookieStoreId, active: true });
   } catch (e) {
-    console.error("Chyba při přesunu tabu do kontejneru:", e.message);
+    console.error("Error moving tab to container:", e.message);
   } finally {
     pendingTabs.delete(tabId);
   }
@@ -749,13 +853,8 @@ async function resolveContainerForWindow(windowId) {
   const ws = Object.values(workspaces).find(w => w.windowId === windowId);
   if (!ws) return null;
 
-  const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
-  if (container.cookieStoreId !== ws.cookieStoreId) {
-    console.log("cookieStoreId aktualizováno pro:", ws.name, "->", container.cookieStoreId);
-    ws.cookieStoreId = container.cookieStoreId;
-    await saveWorkspace(ws);
-  }
-  return container;
+  // Always resolve by name — no cookieStoreId stored in workspace
+  return await findOrCreateContainer(ws.wsName, ws.color, DEFAULT_ICON);
 }
 
 // We intercept tab creation to ensure all tabs opened in a workspace window are assigned
@@ -771,7 +870,7 @@ browser.tabs.onCreated.addListener(async (tab) => {
 
     // If URL is already a real URL (unlikely but possible), reassign immediately
     if (tab.url && (tab.url.startsWith("http://") || tab.url.startsWith("https://"))) {
-      console.log("Nový tab s URL v workspace okně, přesouvám do:", container.cookieStoreId, tab.url);
+      console.log("New tab with URL in workspace window, moving to:", container.cookieStoreId, tab.url);
       await doReassign(tab.id, tab.windowId, container.cookieStoreId, tab.url);
       return;
     }
@@ -781,7 +880,7 @@ browser.tabs.onCreated.addListener(async (tab) => {
     // Firefox). Polling with tabs.get() lets us distinguish a plain new tab (still
     // about:blank) from an externally-opened URL without waiting a full 2 seconds.
     // The onUpdated listener below is kept as a fallback for slower systems.
-    console.log("Parkuji tab, čekám na URL:", tab.id);
+    console.log("Parking tab, waiting for URL:", tab.id);
     const timeoutId = setTimeout(async () => {
       if (!pendingTabs.has(tab.id)) return;
       let url = "about:blank";
@@ -804,14 +903,14 @@ browser.tabs.onCreated.addListener(async (tab) => {
     return;
   }
 
-  // Snapshot if this tab belongs to a workspace window
+  // Snapshot if this tab belongs to a workspace window (debounced)
   const workspaces = await loadWorkspaces();
   const ws = Object.values(workspaces).find(w => w.windowId === tab.windowId);
   if (ws) {
     const snap = await snapshotWindow(tab.windowId).catch(() => null);
     if (snap && snap.length > 0) {
       ws.tabs = snap;
-      await saveWorkspace(ws);
+      scheduleSnapshot(ws);
     }
   }
 });
@@ -826,7 +925,7 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
     if (changeInfo.url && (changeInfo.url.startsWith("http://") || changeInfo.url.startsWith("https://"))) {
       // Real URL arrived — reassign with it
-      console.log("URL dorazila pro parkovaný tab:", tabId, changeInfo.url);
+      console.log("URL arrived for parked tab:", tabId, changeInfo.url);
       removePending(tabId);
       await doReassign(tabId, windowId, cookieStoreId, changeInfo.url).catch(() => {});
       return;
@@ -834,7 +933,7 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
     if (changeInfo.status === "complete") {
       // Tab finished loading as about:blank — plain new tab, reassign with about:blank
-      console.log("Tab dokončen jako about:blank:", tabId);
+      console.log("Tab completed as about:blank:", tabId);
       removePending(tabId);
       await doReassign(tabId, windowId, cookieStoreId, "about:blank").catch(() => {});
       return;
@@ -851,7 +950,7 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   const snap = await snapshotWindow(tab.windowId).catch(() => null);
   if (snap && snap.length > 0) {
     ws.tabs = snap;
-    await saveWorkspace(ws);
+    scheduleSnapshot(ws);
   }
 });
 
@@ -867,7 +966,7 @@ browser.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
   const snap = await snapshotWindow(removeInfo.windowId).catch(() => null);
   if (snap && snap.length > 0) {
     ws.tabs = snap;
-    await saveWorkspace(ws);
+    scheduleSnapshot(ws);
   }
 });
 
@@ -879,7 +978,6 @@ const COLOR_MAP = {
 };
 
 async function updateBadge(windowId) {
-  // Check default workspace first
   const localWins = await browser.storage.local.get(LOCAL_WINS);
   const winsMap = localWins[LOCAL_WINS] || {};
   if (winsMap[DEFAULT_WORKSPACE_ID] === windowId) {
@@ -891,7 +989,7 @@ async function updateBadge(windowId) {
   const workspaces = await loadWorkspaces();
   const ws = Object.values(workspaces).find(w => w.windowId === windowId);
   if (ws) {
-    const badge = ws.name.substring(0, 3).toUpperCase();
+    const badge = ws.wsName.substring(0, 3).toUpperCase();
     const color = COLOR_MAP[ws.color] || "#4f8ef7";
     await browser.browserAction.setBadgeText({ text: badge, windowId });
     await browser.browserAction.setBadgeBackgroundColor({ color, windowId });
@@ -907,4 +1005,10 @@ async function refreshAllBadges() {
   }
 }
 
-console.log("Windowed Container Workspaces background script nacten.");
+// ─── Startup ──────────────────────────────────────────────────────────────────
+
+migrateFromLegacy()
+  .then(() => getOrCreateDeviceId())
+  .catch(e => console.error("Startup error:", e));
+
+console.log("Windowed Container Workspaces background script loaded.");

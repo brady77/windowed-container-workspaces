@@ -35,7 +35,7 @@ const DEFAULT_WORKSPACE_ID = "ws_default";
 // ─── State ────────────────────────────────────────────────────────────────────
 
 let workspaces = {};
-let editingId  = null;
+let editingId  = null; // wsName of workspace being edited, or null for new
 let selColor   = CONTAINER_COLORS[0].id;
 let selIcon    = CONTAINER_ICONS[0].id;
 
@@ -47,13 +47,17 @@ function send(type, payload = {}) {
 
 // ─── Render ───────────────────────────────────────────────────────────────────
 
+function wsDisplayName(ws) {
+  return ws.wsName === DEFAULT_WORKSPACE_ID ? "Default (no container)" : ws.wsName;
+}
+
 function render() {
   const list    = document.getElementById("workspace-list");
   const emptyEl = document.getElementById("empty-state");
   const cards   = Object.values(workspaces).sort((a, b) => {
-    if (a.id === DEFAULT_WORKSPACE_ID) return -1;
-    if (b.id === DEFAULT_WORKSPACE_ID) return 1;
-    return a.createdAt - b.createdAt;
+    if (a.wsName === DEFAULT_WORKSPACE_ID) return -1;
+    if (b.wsName === DEFAULT_WORKSPACE_ID) return 1;
+    return a.wsName.localeCompare(b.wsName);
   });
 
   list.querySelectorAll(".ws-card").forEach(el => el.remove());
@@ -67,11 +71,11 @@ function render() {
   cards.forEach((ws, idx) => {
     const card = document.createElement("div");
     card.className = "ws-card" + (ws.windowId !== null ? " active" : "");
-    card.dataset.id = ws.id;
+    card.dataset.id = ws.wsName;
     card.style.animationDelay = `${idx * 30}ms`;
 
-    const colorHex  = COLOR_HEX[ws.color]  || "#4f8ef7";
-    const iconEmoji = ICON_EMOJI[ws.icon]  || "📁";
+    const colorHex  = COLOR_HEX[ws.color] || "#4f8ef7";
+    const iconEmoji = ICON_EMOJI[ws.icon]  || "🔑";
     const tabCount  = ws.tabs.length;
     const isLive    = ws.windowId !== null;
 
@@ -91,7 +95,7 @@ function render() {
     info.className = "ws-info";
     const nameEl = document.createElement("div");
     nameEl.className = "ws-name";
-    nameEl.textContent = ws.name;
+    nameEl.textContent = wsDisplayName(ws);
     const metaEl = document.createElement("div");
     metaEl.className = "ws-meta";
     metaEl.textContent = `${tabCount} ${tabCount === 1 ? "tab" : "tabs"}`;
@@ -123,7 +127,7 @@ function render() {
       actions.appendChild(openBtn);
     }
 
-    if (ws.id !== DEFAULT_WORKSPACE_ID) {
+    if (ws.wsName !== DEFAULT_WORKSPACE_ID) {
       const renameBtn = document.createElement("button");
       renameBtn.className = "ws-btn";
       renameBtn.dataset.action = "rename";
@@ -147,24 +151,24 @@ function render() {
 
     card.addEventListener("click", (e) => {
       if (e.target.closest(".ws-btn")) return;
-      handleOpen(ws.id);
+      handleOpen(ws.wsName);
     });
 
     card.querySelectorAll(".ws-btn").forEach(btn => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         const action = btn.dataset.action;
-        if (action === "open")      handleOpen(ws.id);
-        if (action === "hibernate") handleHibernate(ws.id);
-        if (action === "rename")    showModal(ws.id);
-        if (action === "delete")    showConfirm(ws.id);
+        if (action === "open")      handleOpen(ws.wsName);
+        if (action === "hibernate") handleHibernate(ws.wsName);
+        if (action === "rename")    showModal(ws.wsName);
+        if (action === "delete")    showConfirm(ws.wsName);
       });
     });
 
     list.appendChild(card);
 
-    if (ws.id !== DEFAULT_WORKSPACE_ID) {
-      send("GET_WS_SIZE", { id: ws.id }).then(({ bytes }) => {
+    if (ws.wsName !== DEFAULT_WORKSPACE_ID) {
+      send("GET_WS_SIZE", { name: ws.wsName }).then(({ bytes }) => {
         const kb = bytes / 1024;
         const sizeStr = kb < 1 ? `${bytes} B` : `${kb.toFixed(1)} KB`;
         const cls = bytes > 7168 ? "size-danger" : bytes > 6144 ? "size-warning" : "";
@@ -184,18 +188,18 @@ async function refresh() {
   render();
 }
 
-async function handleOpen(id) {
-  send("OPEN_WORKSPACE", { id }); // fire and forget
+async function handleOpen(name) {
+  send("OPEN_WORKSPACE", { name }); // fire and forget
   window.close();
 }
 
-async function handleHibernate(id) {
-  await send("HIBERNATE_WORKSPACE", { id });
+async function handleHibernate(name) {
+  await send("HIBERNATE_WORKSPACE", { name });
   await refresh();
 }
 
-async function handleDelete(id) {
-  await send("DELETE_WORKSPACE", { id });
+async function handleDelete(name) {
+  await send("DELETE_WORKSPACE", { name });
   await refresh();
 }
 
@@ -203,11 +207,11 @@ async function handleDelete(id) {
 
 let pendingDeleteId = null;
 
-function showConfirm(id) {
-  const ws = workspaces[id];
+function showConfirm(wsName) {
+  const ws = workspaces[wsName];
   if (!ws) return;
-  pendingDeleteId = id;
-  document.getElementById("confirm-text").textContent = `Delete workspace "${ws.name}"?`;
+  pendingDeleteId = wsName;
+  document.getElementById("confirm-text").textContent = `Delete workspace "${ws.wsName}"?`;
   document.getElementById("confirm-overlay").classList.remove("hidden");
 }
 
@@ -227,16 +231,16 @@ document.getElementById("confirm-overlay").addEventListener("click", (e) => {
 
 // ─── Create/Edit Modal ────────────────────────────────────────────────────────
 
-function showModal(wsId = null) {
-  editingId = wsId;
-  const ws  = wsId ? workspaces[wsId] : null;
+function showModal(wsName = null) {
+  editingId = wsName; // wsName is the stable identity in the new design
+  const ws  = wsName ? workspaces[wsName] : null;
 
   document.getElementById("modal-title").textContent   = ws ? "Rename workspace" : "New workspace";
   document.getElementById("btn-save").textContent      = ws ? "Save" : "Create";
-  document.getElementById("input-name").value          = ws ? ws.name : "";
+  document.getElementById("input-name").value          = ws ? ws.wsName : "";
 
   selColor = ws ? ws.color : CONTAINER_COLORS[0].id;
-  selIcon  = ws ? ws.icon  : CONTAINER_ICONS[0].id;
+  selIcon  = ws ? (ws.icon || CONTAINER_ICONS[0].id) : CONTAINER_ICONS[0].id;
 
   // Hide color/icon picker when renaming (not applicable, only used when creating)
   document.getElementById("color-icon-section").style.display = ws ? "none" : "";
@@ -284,7 +288,7 @@ async function handleSave() {
   if (!name) { document.getElementById("input-name").focus(); return; }
 
   const result = editingId
-    ? await send("RENAME_WORKSPACE", { id: editingId, name })
+    ? await send("RENAME_WORKSPACE", { oldName: editingId, newName: name })
     : await send("CREATE_WORKSPACE", { name, color: selColor, icon: selIcon });
 
   if (result && result.error) {
