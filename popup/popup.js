@@ -321,44 +321,18 @@ document.getElementById("input-name").addEventListener("keydown", (e) => {
 
 // ─── Export / Import ──────────────────────────────────────────────────────────
 
-async function handleExport() {
-  const data = await send("EXPORT_WORKSPACES");
-  const json = JSON.stringify(data, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `wcw-backup-${new Date().toISOString().slice(0, 10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+function openImportExportPage() {
+  browser.windows.create({
+    type: "popup",
+    url: browser.runtime.getURL("popup/import-export.html"),
+    width: 420,
+    height: 320
+  });
+  window.close();
 }
 
-document.getElementById("btn-export").addEventListener("click", handleExport);
-
-document.getElementById("btn-import").addEventListener("click", () => {
-  document.getElementById("import-file").click();
-});
-
-document.getElementById("import-file").addEventListener("change", async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  let data;
-  try {
-    data = JSON.parse(await file.text());
-  } catch {
-    showToast("Invalid JSON file");
-    return;
-  }
-  const result = await send("IMPORT_WORKSPACES", { data });
-  if (result && result.error) {
-    showToast("Import failed: " + result.error);
-  } else {
-    const n = result.imported;
-    showToast(`Imported ${n} workspace${n !== 1 ? "s" : ""}`);
-    await refresh();
-  }
-  e.target.value = "";
-});
+document.getElementById("btn-export").addEventListener("click", openImportExportPage);
+document.getElementById("btn-import").addEventListener("click", openImportExportPage);
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
 

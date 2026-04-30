@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Windowed Container Workspaces",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "Manage browser workspaces with dedicated Firefox containers and persistent tabs. Each workspace runs in its own window with full container isolation.",
   "permissions": [
     "tabs",
@@ -50,6 +50,7 @@
       "strict_min_version": "142.0"
     }
   },
+  "web_accessible_resources": ["popup/import-export.html"],
   "content_security_policy": "script-src 'self'; object-src 'self'",
   "homepage_url": "https://github.com/brady77/windowed-container-workspaces"
 }
