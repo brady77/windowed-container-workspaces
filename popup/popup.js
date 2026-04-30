@@ -325,8 +325,8 @@ function openImportExportPage() {
   browser.windows.create({
     type: "popup",
     url: browser.runtime.getURL("popup/import-export.html"),
-    width: 420,
-    height: 320
+    width: 460,
+    height: 480
   });
   window.close();
 }

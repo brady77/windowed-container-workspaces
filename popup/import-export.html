@@ -7,6 +7,7 @@
 </head>
 <body>
   <div id="app">
+
     <header>
       <span class="title">Backup &amp; Restore</span>
       <button id="btn-close" class="btn-icon" title="Close">
@@ -16,7 +17,9 @@
       </button>
     </header>
 
-    <main>
+    <!-- ── Panel: Export / Import (default) ────────────────────────────────── -->
+    <div id="panel-main" class="panel">
+
       <section>
         <div class="section-label">Export</div>
         <p class="section-desc">Download all workspaces as a JSON backup file.</p>
@@ -34,20 +37,45 @@
 
       <section>
         <div class="section-label">Import</div>
-        <p class="section-desc">Restore workspaces from a previously exported backup file.</p>
+        <p class="section-desc">Select a backup file to review and restore workspaces.</p>
         <button id="btn-import" class="btn-secondary">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="17 8 12 3 7 8"/>
             <line x1="12" y1="3" x2="12" y2="15"/>
           </svg>
-          Import from file
+          Select backup file…
         </button>
         <input type="file" id="import-file" accept=".json" />
       </section>
 
       <div id="status" class="status"></div>
-    </main>
+
+    </div>
+
+    <!-- ── Panel: Review backup before restoring ────────────────────────────── -->
+    <div id="panel-review" class="panel hidden">
+
+      <div class="panel-subheader">Restore from backup</div>
+
+      <div id="review-list" class="review-list"></div>
+
+      <div class="review-footer">
+        <button id="btn-cancel-review" class="btn-secondary">Cancel</button>
+        <button id="btn-restore" class="btn-primary" disabled>Restore selected</button>
+      </div>
+
+    </div>
+
+    <!-- ── Panel: Result after restore ─────────────────────────────────────── -->
+    <div id="panel-result" class="panel hidden">
+
+      <div id="result-message" class="result-message"></div>
+      <div id="result-notes"></div>
+      <button id="btn-result-close" class="btn-secondary">Close window</button>
+
+    </div>
+
   </div>
   <script src="import-export.js"></script>
 </body>

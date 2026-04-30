@@ -18,8 +18,8 @@
 }
 
 html, body {
-  width: 420px;
-  height: 320px;
+  width: 460px;
+  height: 480px;
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
@@ -68,16 +68,27 @@ header {
 }
 .btn-icon:hover { background: rgba(224,85,85,.15); border-color: var(--danger); color: var(--danger); }
 
-/* ─── Main content ───────────────────────────────────────────────────────────── */
+/* ─── Panel system ───────────────────────────────────────────────────────────── */
 
-main {
-  flex: 1;
+.panel {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.panel.hidden { display: none; }
+
+/* ─── Panel: main (export/import) ───────────────────────────────────────────── */
+
+#panel-main {
   padding: 16px;
+  gap: 0;
   overflow-y: auto;
 }
+
+#panel-main::-webkit-scrollbar { width: 4px; }
+#panel-main::-webkit-scrollbar-track { background: transparent; }
+#panel-main::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
 
 section {
   display: flex;
@@ -105,6 +116,8 @@ section {
   flex-shrink: 0;
 }
 
+#import-file { display: none; }
+
 /* ─── Buttons ────────────────────────────────────────────────────────────────── */
 
 .btn-primary, .btn-secondary {
@@ -122,22 +135,13 @@ section {
   font-family: inherit;
   align-self: flex-start;
 }
-.btn-primary {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
 .btn-primary:hover { background: #6fa3ff; }
-.btn-secondary {
-  background: transparent;
-  color: var(--text-dim);
-  border-color: var(--border2);
-}
+.btn-primary:disabled { opacity: .4; cursor: default; }
+.btn-secondary { background: transparent; color: var(--text-dim); border-color: var(--border2); }
 .btn-secondary:hover { color: var(--text); border-color: var(--text-dim); }
 
-#import-file { display: none; }
-
-/* ─── Status message ─────────────────────────────────────────────────────────── */
+/* ─── Status (main panel) ────────────────────────────────────────────────────── */
 
 .status {
   margin-top: 14px;
@@ -157,4 +161,143 @@ section {
   background: rgba(224,85,85,.1);
   border: 1px solid rgba(224,85,85,.3);
   color: var(--danger);
+}
+
+/* ─── Panel: review ──────────────────────────────────────────────────────────── */
+
+#panel-review { padding: 0; }
+
+.panel-subheader {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 10px 16px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+
+/* Scrollable workspace list */
+.review-list {
+  flex: 1;
+  overflow-y: auto;
+}
+.review-list::-webkit-scrollbar { width: 4px; }
+.review-list::-webkit-scrollbar-track { background: transparent; }
+.review-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+/* One block per workspace */
+.review-ws {
+  border-bottom: 1px solid var(--border);
+}
+.review-ws:last-child { border-bottom: none; }
+
+/* Workspace name row + select-all */
+.review-ws-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 16px 6px;
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 1;
+}
+
+.review-ws-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.select-all-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.select-all-label:hover { color: var(--text); }
+
+/* Tab rows */
+.review-tab-list { padding: 2px 16px 10px 16px; }
+
+.review-tab-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.review-tab-row:hover { background: var(--surface2); padding-left: 4px; padding-right: 4px; margin: 0 -4px; }
+
+.review-tab-row input[type="checkbox"] {
+  flex-shrink: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.tab-url {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.review-tab-row:hover .tab-url,
+.review-tab-row input:checked ~ .tab-url { color: var(--text); }
+
+.group-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Footer with action buttons */
+.review-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+}
+.review-footer .btn-primary,
+.review-footer .btn-secondary { align-self: auto; }
+
+/* ─── Panel: result ──────────────────────────────────────────────────────────── */
+
+#panel-result {
+  padding: 20px 16px;
+  gap: 14px;
+}
+
+.result-message {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--success);
+}
+
+.result-note {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 8px 12px;
+  background: rgba(122,132,153,.08);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  line-height: 1.5;
 }
