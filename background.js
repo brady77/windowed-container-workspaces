@@ -149,7 +149,7 @@ async function myDeviceId() {
 async function getOrCreateDeviceName(deviceId) {
   const local = await browser.storage.local.get(LOCAL_DEVICE_NAME);
   if (local[LOCAL_DEVICE_NAME]) return local[LOCAL_DEVICE_NAME];
-  const name = "Device " + deviceId.slice(0, 6);
+  const name = "Device " + deviceId;
   await browser.storage.local.set({ [LOCAL_DEVICE_NAME]: name });
   return name;
 }
@@ -260,13 +260,25 @@ async function migrateFromLegacy() {
     try {
       const old = decompressWs(allSync[key]);
       if (!old || !old.name) continue;
+      // Explicitly map tabs to guarantee groupInfo.title survives the format change
+      const tabs = (old.tabs || []).map(t => ({
+        url:       t.url,
+        title:     t.title || t.url,
+        pinned:    !!t.pinned,
+        groupId:   t.groupId != null ? t.groupId : null,
+        groupInfo: t.groupInfo ? {
+          title:     t.groupInfo.title != null ? t.groupInfo.title : "",
+          color:     t.groupInfo.color     || "blue",
+          collapsed: !!t.groupInfo.collapsed
+        } : null
+      }));
       const newWs = {
         wsName:    old.name,
         color:     old.color || "blue",
         icon:      old.icon  || DEFAULT_ICON,
         deviceId,
         updatedAt: old.createdAt || Date.now(),
-        tabs:      old.tabs || []
+        tabs
       };
       await browser.storage.sync.set({ [snapKey(deviceId, old.name)]: compressWs(newWs) });
       await browser.storage.sync.remove(key);
@@ -275,6 +287,16 @@ async function migrateFromLegacy() {
       console.error("Migration failed for key:", key, e.message);
     }
   }
+
+  // Remove stale UUID-format keys from wcw_wins (old format: ws_<timestamp>)
+  const localWinsData = await browser.storage.local.get(LOCAL_WINS);
+  const wins = localWinsData[LOCAL_WINS] || {};
+  const staleKeys = Object.keys(wins).filter(k => /^ws_\d+$/.test(k));
+  if (staleKeys.length > 0) {
+    for (const k of staleKeys) delete wins[k];
+    await browser.storage.local.set({ [LOCAL_WINS]: wins });
+    console.log("Removed", staleKeys.length, "stale wcw_wins key(s):", staleKeys);
+  }
 }
 
 // ─── Snapshot debounce ────────────────────────────────────────────────────────
@@ -282,13 +304,16 @@ async function migrateFromLegacy() {
 // storage.sync, snapshot writes triggered by tab listeners are debounced by 60 s.
 // Explicit user actions (open, hibernate, rename, delete) always write immediately.
 
-const snapshotTimers = new Map(); // wsName → timeoutId
+const snapshotTimers   = new Map(); // wsName → timeoutId
+const pendingSnapshots = new Map(); // wsName → ws (latest in-memory state, not yet persisted)
 
 function scheduleSnapshot(ws) {
+  pendingSnapshots.set(ws.wsName, ws);
   const prev = snapshotTimers.get(ws.wsName);
   if (prev) clearTimeout(prev);
   const timer = setTimeout(async () => {
     snapshotTimers.delete(ws.wsName);
+    pendingSnapshots.delete(ws.wsName);
     await saveWorkspace(ws).catch(e => console.error("Deferred snapshot save failed:", e));
   }, 60000);
   snapshotTimers.set(ws.wsName, timer);
@@ -468,8 +493,13 @@ async function handleOpenWorkspace({ name }) {
   }
 
   const windowId = await openWorkspaceWindow(ws, container.cookieStoreId);
+
+  // Snapshot immediately after the window is built — group titles are fully applied
+  // here because openWorkspaceWindow awaits tabGroups.update(). Taking the snapshot
+  // before saveWindowId prevents any concurrent tab events from interfering.
+  const openSnap = await snapshotWindow(windowId).catch(() => null);
   ws.windowId = windowId;
-  ws.tabs = [];
+  ws.tabs = openSnap && openSnap.length > 0 ? openSnap : [];
   await saveWorkspace(ws);
   await saveWindowId(ws.wsName, windowId);
   await refreshAllBadges();
@@ -735,7 +765,7 @@ async function handleGetDevices() {
     if (underIdx === -1) continue;
     const dId = rest.slice(0, underIdx);
     if (dId === deviceId) continue; // skip own keys
-    if (!devices[dId]) devices[dId] = { deviceId: dId, deviceName: "Device " + dId.slice(0, 6), workspaces: [] };
+    if (!devices[dId]) devices[dId] = { deviceId: dId, deviceName: "Device " + dId, workspaces: [] };
     const ws = decompressWs(val);
     if (ws) devices[dId].workspaces.push(ws);
   }
@@ -799,7 +829,14 @@ browser.windows.onRemoved.addListener(async (windowId) => {
   const workspaces = await loadWorkspaces();
   for (const ws of Object.values(workspaces)) {
     if (ws.windowId === windowId) {
-      // Window close writes immediately — user may not open Firefox again for a while
+      // Flush any pending debounced snapshot so the latest tab/group state is preserved
+      const pending = pendingSnapshots.get(ws.wsName);
+      if (pending) {
+        clearTimeout(snapshotTimers.get(ws.wsName));
+        snapshotTimers.delete(ws.wsName);
+        pendingSnapshots.delete(ws.wsName);
+        ws.tabs = pending.tabs;
+      }
       ws.windowId = null;
       await saveWorkspace(ws);
       await saveWindowId(ws.wsName, null);
