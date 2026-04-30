@@ -503,6 +503,113 @@ async function handleImportWorkspaces({ data }) {
   return { imported };
 }
 
+// Returns the backup JSON structured for the UI. No comparison with local state.
+async function handleAnalyzeImport({ data }) {
+  if (!data || !Array.isArray(data.workspaces)) throw new Error("Invalid backup format");
+  return { workspaces: data.workspaces };
+}
+
+// Finds an existing groupId in the snapshot whose groupInfo.title matches, or allocates
+// the next integer above the current maximum. Tabs sharing a group name stay together.
+function resolveGroupIdForSnapshot(existingTabs, groupInfo) {
+  if (!groupInfo || !groupInfo.title) return null;
+  for (const t of existingTabs) {
+    if (t.groupInfo && t.groupInfo.title === groupInfo.title) return t.groupId;
+  }
+  const used = existingTabs.map(t => t.groupId).filter(id => id != null);
+  return (used.length > 0 ? Math.max(...used) : 0) + 1;
+}
+
+// Adds a single tab live into an open workspace window, assigning it to a tab group
+// by name (reuses an existing group if one with the same title exists, else creates one).
+async function addTabLive(windowId, cookieStoreId, tab) {
+  const newTab = await browser.tabs.create({ windowId, url: tab.url, cookieStoreId, active: false });
+  if (!tab.groupInfo || !tab.groupInfo.title) return;
+  let groups = [];
+  try { groups = await browser.tabGroups.query({ windowId }); } catch (e) {}
+  const existing = groups.find(g => g.title === tab.groupInfo.title);
+  if (existing) {
+    await browser.tabs.group({ tabIds: [newTab.id], groupId: existing.id });
+  } else {
+    const gid = await browser.tabs.group({ tabIds: [newTab.id], createProperties: { windowId } });
+    await browser.tabGroups.update(gid, {
+      title: tab.groupInfo.title || "",
+      color: tab.groupInfo.color || "blue",
+      collapsed: tab.groupInfo.collapsed || false
+    });
+  }
+}
+
+async function handleSelectiveImport({ create, addTabs }) {
+  let createdCount = 0;
+  let tabsAdded = 0;
+  const hibernatedNames = [];
+
+  // Phase 1: create explicitly listed workspace shells (usually [])
+  for (const ws of (create || [])) {
+    try {
+      await handleCreateWorkspace({ name: ws.name, color: ws.color || "blue", icon: ws.icon || "circle" });
+      createdCount++;
+    } catch (e) {
+      console.warn("Could not pre-create workspace:", ws.name, e.message);
+    }
+  }
+
+  // Phase 2: add tabs — find workspace by name, auto-creating if absent
+  let workspaces = await loadWorkspaces();
+  const findByName = name => Object.values(workspaces).find(w => w.name.toLowerCase() === name.toLowerCase());
+
+  for (const entry of (addTabs || [])) {
+    const { wsName, wsColor, wsIcon, tabs } = entry;
+    if (!tabs || tabs.length === 0) continue;
+
+    let ws = findByName(wsName);
+
+    if (!ws) {
+      try {
+        await handleCreateWorkspace({ name: wsName, color: wsColor || "blue", icon: wsIcon || "circle" });
+        createdCount++;
+        workspaces = await loadWorkspaces();
+        ws = findByName(wsName);
+      } catch (e) {
+        console.error("Failed to create workspace for import:", wsName, e.message);
+        continue;
+      }
+    }
+    if (!ws) continue;
+
+    const container = await findOrCreateContainer(ws.name, ws.color, ws.icon);
+    ws.cookieStoreId = container.cookieStoreId;
+
+    if (ws.windowId !== null) {
+      // Window is open: add tabs live with group handling
+      for (const tab of tabs) {
+        await addTabLive(ws.windowId, container.cookieStoreId, tab).catch(e => {
+          console.error("addTabLive failed:", tab.url, e.message);
+        });
+        tabsAdded++;
+      }
+    } else {
+      // Hibernated: append to snapshot, preserving group structure
+      for (const tab of tabs) {
+        const groupId = resolveGroupIdForSnapshot(ws.tabs, tab.groupInfo || null);
+        ws.tabs.push({
+          url: tab.url,
+          title: tab.title || tab.url,
+          pinned: tab.pinned || false,
+          groupId,
+          groupInfo: tab.groupInfo || null
+        });
+        tabsAdded++;
+      }
+      await saveWorkspace(ws);
+      if (!hibernatedNames.includes(ws.name)) hibernatedNames.push(ws.name);
+    }
+  }
+
+  return { created: createdCount, tabsAdded, hibernatedWorkspaces: hibernatedNames };
+}
+
 async function handleGetWsSize({ id }) {
   const bytes = await browser.storage.sync.getBytesInUse("wcw_ws_" + id);
   return { bytes };
@@ -558,6 +665,8 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case "RENAME_WORKSPACE":    handler = () => handleRenameWorkspace(msg.payload); break;
     case "EXPORT_WORKSPACES":   handler = handleExportWorkspaces; break;
     case "IMPORT_WORKSPACES":   handler = () => handleImportWorkspaces(msg.payload); break;
+    case "ANALYZE_IMPORT":      handler = () => handleAnalyzeImport(msg.payload); break;
+    case "SELECTIVE_IMPORT":    handler = () => handleSelectiveImport(msg.payload); break;
     default:
       sendResponse({ error: "Unknown message type: " + msg.type });
       return false;
