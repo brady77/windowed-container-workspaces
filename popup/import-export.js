@@ -334,6 +334,32 @@ document.getElementById("btn-result-close").addEventListener("click", () => wind
 
 document.getElementById("btn-close").addEventListener("click", () => window.close());
 
+// ─── Live refresh of other-devices list ──────────────────────────────────────
+
+async function refreshOtherDevicesList() {
+  let result;
+  try { result = await send("GET_DEVICES"); } catch (e) { return; }
+  const { others } = result;
+  const section = document.getElementById("other-devices-section");
+  if (others && others.length > 0) {
+    renderDeviceList(others);
+    section.classList.remove("hidden");
+  } else {
+    section.classList.add("hidden");
+  }
+}
+
+let _deviceRefreshTimer = null;
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== "sync") return;
+  if (!Object.keys(changes).some(k => k.startsWith("wcw_snap_"))) return;
+  if (_deviceRefreshTimer) clearTimeout(_deviceRefreshTimer);
+  _deviceRefreshTimer = setTimeout(() => {
+    _deviceRefreshTimer = null;
+    refreshOtherDevicesList();
+  }, 500);
+});
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 loadDeviceSection();
