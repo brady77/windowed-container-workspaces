@@ -786,6 +786,13 @@ async function handleGetDevices() {
 
 async function handleSetDeviceName({ name }) {
   await browser.storage.local.set({ [LOCAL_DEVICE_NAME]: name });
+  // Re-save all workspaces so the new deviceName propagates to sync immediately.
+  // Without this, other devices would only see the updated name after the next
+  // organic workspace save (tab event, window close, etc.).
+  const workspaces = await loadWorkspaces();
+  for (const ws of Object.values(workspaces)) {
+    await saveWorkspace(ws);
+  }
   return { ok: true };
 }
 
