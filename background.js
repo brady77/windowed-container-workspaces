@@ -260,6 +260,10 @@ async function migrateFromLegacy() {
     try {
       const old = decompressWs(allSync[key]);
       if (!old || !old.name) continue;
+      // NOTE: groupInfo.title is intentionally preserved as-is from the legacy format.
+      // In v1.5.3, tab group titles were never correctly persisted to storage (always saved
+      // as empty string ""). This is a known limitation — group names from pre-1.6.0 data
+      // cannot be recovered during migration.
       // Explicitly map tabs to guarantee groupInfo.title survives the format change
       const tabs = (old.tabs || []).map(t => ({
         url:       t.url,
