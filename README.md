@@ -8,7 +8,8 @@ A Firefox extension that lets you organize your browsing into isolated workspace
 - **Persistent tabs** — tabs are saved automatically and restored when you reopen a workspace
 - **Tab groups preserved** — tab groups (including names and colors) are saved and restored with the workspace
 - **Hibernation** — close a workspace window and reopen it later with all tabs intact
-- **Sync across devices** — workspaces sync via Firefox Sync to all your signed-in Firefox instances
+- **Conflict-free sync across devices** — each device maintains its own workspace snapshots via Firefox Sync; devices never overwrite each other's data
+- **Cross-device pull** — see workspaces from your other devices and selectively import tabs via the Backup & Restore page
 - **Workspace badge** — the toolbar icon shows a 3-letter abbreviation of the active workspace so you always know where you are
 - **New tabs stay in container** — any tab opened inside a workspace window is automatically assigned to the correct container
 - **Default (no container) workspace** — a built-in workspace that opens a regular Firefox window without any container, ideal for general browsing or accessing Firefox settings
@@ -58,14 +59,34 @@ Click the **✎** button — the workspace and its container are renamed simulta
 ### Default (no container) workspace
 Always visible at the top of the list. Opens a regular Firefox window without any container — tabs are not assigned to any container. Cannot be renamed or deleted.
 
+## Backup & Restore
+
+Click the **Backup & Restore** button in the popup footer to open the dedicated page.
+
+### This device
+Set a human-readable name for the current device (e.g. "Work Laptop"). The name is visible to your other devices.
+
+### Export
+Downloads all your workspaces as a JSON backup file.
+
+### Import
+Select a previously exported JSON file to review its contents and selectively restore workspaces and tabs.
+
+### Other devices
+If you use Firefox Sync across multiple devices, each device's workspaces appear here automatically. Click **Pull…** next to a device to open the review panel and selectively import workspaces and tabs from that device into your current one.
+
+> The list updates live as changes arrive from your other devices — no restart required.
+
 ## Sync behavior
 
-Workspaces are synced via `storage.sync` (Firefox Sync). Each workspace is stored as a separate key, so adding or removing a workspace on one device propagates cleanly to others without overwriting unrelated workspaces.
+Each device stores its own workspace snapshots independently under a unique device ID. Devices never overwrite each other's data, even when using the same Firefox Sync account.
 
-**What syncs:** workspace name, color, icon, saved tab URLs, tab groups  
-**What doesn't sync:** which window is currently open (this is local per device)
+**What syncs:** workspace name, color, saved tab URLs, tab groups, device name  
+**What doesn't sync:** which window is currently open on any given device; container icon (always set to the default on each device)
 
-**On a new device:** when you open a workspace for the first time, the extension looks for an existing container with the same name. If none is found, a new container is created automatically.
+**Note on color:** when pulling a workspace from another device that doesn't yet exist locally, the remote workspace's color is applied to the newly created local workspace. If the workspace already exists locally, its color and icon are left unchanged.
+
+**On a new device:** when you open a workspace for the first time, the extension looks for an existing Firefox Container with the same name. If none is found, a new container is created automatically.
 
 > Sync requires a signed extension and a Firefox account with Sync enabled.
 
