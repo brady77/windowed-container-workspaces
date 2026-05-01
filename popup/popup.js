@@ -12,18 +12,19 @@ const CONTAINER_COLORS = [
 ];
 
 const CONTAINER_ICONS = [
-  { id: "fingerprint", emoji: "🔑" },
+  { id: "fingerprint", emoji: "🖐"  },
   { id: "briefcase",   emoji: "💼" },
+  { id: "dollar",      emoji: "💵" },
   { id: "cart",        emoji: "🛒" },
-  { id: "circle",      emoji: "⚙️"  },
-  { id: "dollar",      emoji: "💰" },
-  { id: "fence",       emoji: "🏠" },
-  { id: "food",        emoji: "🍕" },
-  { id: "fruit",       emoji: "🍎" },
+  { id: "vacation",    emoji: "✈️"  },
   { id: "gift",        emoji: "🎁" },
+  { id: "food",        emoji: "🍽️" },
+  { id: "fruit",       emoji: "🍎" },
   { id: "pet",         emoji: "🐾" },
   { id: "tree",        emoji: "🌲" },
-  { id: "vacation",    emoji: "✈️"  },
+  { id: "chill",       emoji: "😎" },
+  { id: "circle",      emoji: "⚫" },
+  { id: "fence",       emoji: "🏡" },
 ];
 
 const ICON_EMOJI  = Object.fromEntries(CONTAINER_ICONS.map(i => [i.id, i.emoji]));
@@ -37,7 +38,7 @@ const DEFAULT_WORKSPACE_ID = "ws_default";
 let workspaces = {};
 let editingId  = null; // wsName of workspace being edited, or null for new
 let selColor   = CONTAINER_COLORS[0].id;
-let selIcon    = CONTAINER_ICONS[0].id;
+let selIcon    = "circle";
 
 // ─── Messaging ────────────────────────────────────────────────────────────────
 
@@ -131,7 +132,7 @@ function render() {
       const renameBtn = document.createElement("button");
       renameBtn.className = "ws-btn";
       renameBtn.dataset.action = "rename";
-      renameBtn.title = "Rename";
+      renameBtn.title = "Edit";
       renameBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
       actions.appendChild(renameBtn);
 
@@ -235,15 +236,12 @@ function showModal(wsName = null) {
   editingId = wsName; // wsName is the stable identity in the new design
   const ws  = wsName ? workspaces[wsName] : null;
 
-  document.getElementById("modal-title").textContent   = ws ? "Rename workspace" : "New workspace";
+  document.getElementById("modal-title").textContent   = ws ? "Edit workspace" : "New workspace";
   document.getElementById("btn-save").textContent      = ws ? "Save" : "Create";
   document.getElementById("input-name").value          = ws ? ws.wsName : "";
 
   selColor = ws ? ws.color : CONTAINER_COLORS[0].id;
-  selIcon  = ws ? (ws.icon || CONTAINER_ICONS[0].id) : CONTAINER_ICONS[0].id;
-
-  // Hide color/icon picker when renaming (not applicable, only used when creating)
-  document.getElementById("color-icon-section").style.display = ws ? "none" : "";
+  selIcon  = ws ? (ws.icon || "circle") : "circle";
 
   renderColorPicker();
   renderIconPicker();
@@ -288,7 +286,7 @@ async function handleSave() {
   if (!name) { document.getElementById("input-name").focus(); return; }
 
   const result = editingId
-    ? await send("RENAME_WORKSPACE", { oldName: editingId, newName: name })
+    ? await send("RENAME_WORKSPACE", { oldName: editingId, newName: name, icon: selIcon, color: selColor })
     : await send("CREATE_WORKSPACE", { name, color: selColor, icon: selIcon });
 
   if (result && result.error) {

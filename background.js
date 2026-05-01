@@ -123,7 +123,7 @@ const LOCAL_DEVICE_ID   = "wcw_device_id";   // local: stable device identifier
 const LOCAL_DEVICE_NAME = "wcw_device_name"; // local: human-readable device label
 
 const DEFAULT_WORKSPACE_ID = "ws_default"; // virtual default (no container) workspace
-const DEFAULT_ICON         = "fingerprint"; // Firefox container icon for all new containers
+const DEFAULT_ICON         = "circle";      // Firefox container icon used as fallback
 
 // ─── Device identity ──────────────────────────────────────────────────────────
 
@@ -566,35 +566,53 @@ async function handleDeleteWorkspace({ name }) {
   return { ok: true };
 }
 
-async function handleRenameWorkspace({ oldName, newName }) {
+async function handleRenameWorkspace({ oldName, newName, icon, color }) {
   const workspaces = await loadWorkspaces();
   const ws = workspaces[oldName];
   if (!ws) throw new Error("Workspace not found: " + oldName);
 
-  const duplicate = Object.values(workspaces).find(
-    w => w.wsName !== oldName && w.wsName.toLowerCase() === newName.toLowerCase()
-  );
-  if (duplicate) throw new Error("A workspace with this name already exists.");
+  const nameChanged = newName !== oldName;
 
-  // Rename the Firefox container before updating our records
-  const existing = await browser.contextualIdentities.query({ name: oldName });
-  if (existing && existing.length > 0) {
-    await browser.contextualIdentities.update(existing[0].cookieStoreId, { name: newName });
+  if (nameChanged) {
+    const duplicate = Object.values(workspaces).find(
+      w => w.wsName !== oldName && w.wsName.toLowerCase() === newName.toLowerCase()
+    );
+    if (duplicate) throw new Error("A workspace with this name already exists.");
   }
 
-  // Write new snap key, delete old
-  const newWs = { ...ws, wsName: newName };
-  await saveWorkspace(newWs);
-  const deviceId = await myDeviceId();
-  await browser.storage.sync.remove(snapKey(deviceId, oldName));
+  // Update the Firefox container (name, icon, color as applicable)
+  const existing = await browser.contextualIdentities.query({ name: oldName });
+  if (existing && existing.length > 0) {
+    const update = {};
+    if (nameChanged)           update.name  = newName;
+    if (icon && icon !== ws.icon)   update.icon  = icon;
+    if (color && color !== ws.color) update.color = color;
+    if (Object.keys(update).length > 0) {
+      await browser.contextualIdentities.update(existing[0].cookieStoreId, update);
+    }
+  }
 
-  // Update local windowId mapping if this workspace has a window open
-  const localWins = await browser.storage.local.get(LOCAL_WINS);
-  const wins = localWins[LOCAL_WINS] || {};
-  if (wins[oldName] !== undefined) {
-    wins[newName] = wins[oldName];
-    delete wins[oldName];
-    await browser.storage.local.set({ [LOCAL_WINS]: wins });
+  const newWs = {
+    ...ws,
+    wsName: newName,
+    icon:   icon  || ws.icon,
+    color:  color || ws.color,
+  };
+  await saveWorkspace(newWs);
+
+  // Only remove the old key when the name actually changed — if name is unchanged,
+  // the old and new keys are identical and removing it would delete the snapshot.
+  if (nameChanged) {
+    const deviceId = await myDeviceId();
+    await browser.storage.sync.remove(snapKey(deviceId, oldName));
+
+    const localWins = await browser.storage.local.get(LOCAL_WINS);
+    const wins = localWins[LOCAL_WINS] || {};
+    if (wins[oldName] !== undefined) {
+      wins[newName] = wins[oldName];
+      delete wins[oldName];
+      await browser.storage.local.set({ [LOCAL_WINS]: wins });
+    }
   }
 
   return newWs;
