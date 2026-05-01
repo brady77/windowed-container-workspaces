@@ -28,6 +28,7 @@ const DEFAULT_WORKSPACE_ID = "ws_default";
 // ─── State ────────────────────────────────────────────────────────────────────
 
 let workspaces   = {};
+let wsOrder      = []; // user-defined sort order (wsNames, excluding default)
 let editingId    = null; // wsName of workspace being edited, or null for new
 let selColor     = CONTAINER_COLORS[0].id;
 let selIcon      = "circle";
@@ -50,21 +51,19 @@ function render() {
   const emptyEl  = document.getElementById("empty-state");
   const searchBar = document.getElementById("search-bar");
 
-  const allCards = Object.values(workspaces).sort((a, b) => {
-    if (a.wsName === DEFAULT_WORKSPACE_ID) return -1;
-    if (b.wsName === DEFAULT_WORKSPACE_ID) return 1;
-    return a.wsName.localeCompare(b.wsName);
-  });
+  const nonDefaultSorted = getFullOrder().map(name => workspaces[name]).filter(Boolean);
+  const allSorted = [
+    ...(workspaces[DEFAULT_WORKSPACE_ID] ? [workspaces[DEFAULT_WORKSPACE_ID]] : []),
+    ...nonDefaultSorted,
+  ];
 
-  // Show search bar only when there are enough workspaces to warrant filtering
-  const nonDefault = allCards.filter(w => w.wsName !== DEFAULT_WORKSPACE_ID);
-  searchBar.classList.toggle("hidden", nonDefault.length < 5);
+  searchBar.classList.toggle("hidden", nonDefaultSorted.length < 5);
 
   const cards = searchFilter
-    ? allCards.filter(w =>
+    ? allSorted.filter(w =>
         w.wsName === DEFAULT_WORKSPACE_ID ||
         w.wsName.toLowerCase().includes(searchFilter.toLowerCase()))
-    : allCards;
+    : allSorted;
 
   list.querySelectorAll(".ws-card").forEach(el => el.remove());
 
@@ -139,6 +138,26 @@ function render() {
     }
 
     if (ws.wsName !== DEFAULT_WORKSPACE_ID) {
+      const nonDefIdx = nonDefaultSorted.indexOf(ws);
+
+      if (!searchFilter) {
+        const upBtn = document.createElement("button");
+        upBtn.className = "ws-btn";
+        upBtn.dataset.action = "move-up";
+        upBtn.title = "Move up";
+        upBtn.disabled = nonDefIdx === 0;
+        upBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="18 15 12 9 6 15"/></svg>`;
+        actions.appendChild(upBtn);
+
+        const downBtn = document.createElement("button");
+        downBtn.className = "ws-btn";
+        downBtn.dataset.action = "move-down";
+        downBtn.title = "Move down";
+        downBtn.disabled = nonDefIdx === nonDefaultSorted.length - 1;
+        downBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>`;
+        actions.appendChild(downBtn);
+      }
+
       const renameBtn = document.createElement("button");
       renameBtn.className = "ws-btn";
       renameBtn.dataset.action = "rename";
@@ -173,6 +192,8 @@ function render() {
         if (action === "hibernate") handleHibernate(ws.wsName);
         if (action === "rename")    showModal(ws.wsName);
         if (action === "delete")    showConfirm(ws.wsName);
+        if (action === "move-up")   handleMove(ws.wsName, "up");
+        if (action === "move-down") handleMove(ws.wsName, "down");
       });
     });
 
@@ -195,13 +216,36 @@ function render() {
 // ─── Actions ─────────────────────────────────────────────────────────────────
 
 async function refresh() {
-  workspaces = await send("GET_STATE");
+  const state = await send("GET_STATE");
+  workspaces = state.workspaces || state;
+  wsOrder    = state.order      || [];
   render();
+}
+
+function getFullOrder() {
+  // Start from the stored order, then append any unordered workspaces alphabetically
+  const ordered = wsOrder.filter(name => workspaces[name]);
+  Object.keys(workspaces)
+    .filter(name => name !== DEFAULT_WORKSPACE_ID && !ordered.includes(name))
+    .sort((a, b) => a.localeCompare(b))
+    .forEach(name => ordered.push(name));
+  return ordered;
 }
 
 async function handleOpen(name) {
   send("OPEN_WORKSPACE", { name }); // fire and forget
   window.close();
+}
+
+function handleMove(wsName, direction) {
+  const order = getFullOrder();
+  const idx = order.indexOf(wsName);
+  if (direction === "up"   && idx > 0)                  [order[idx - 1], order[idx]] = [order[idx], order[idx - 1]];
+  else if (direction === "down" && idx < order.length - 1) [order[idx], order[idx + 1]] = [order[idx + 1], order[idx]];
+  else return;
+  wsOrder = order;
+  render();
+  send("SET_ORDER", { order }).catch(e => console.error("SET_ORDER failed:", e));
 }
 
 async function handleHibernate(name) {

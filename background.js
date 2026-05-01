@@ -121,6 +121,7 @@ const SNAP_PREFIX       = "wcw_snap_";       // sync key prefix
 const LOCAL_WINS        = "wcw_wins";        // local: { wsName → windowId }
 const LOCAL_DEVICE_ID   = "wcw_device_id";   // local: stable device identifier
 const LOCAL_DEVICE_NAME = "wcw_device_name"; // local: human-readable device label
+const LOCAL_ORDER       = "wcw_order";       // local: [wsName, ...] user-defined sort order
 
 const DEFAULT_WORKSPACE_ID = "ws_default"; // virtual default (no container) workspace
 const DEFAULT_ICON         = "circle";      // Firefox container icon used as fallback
@@ -561,6 +562,11 @@ async function handleDeleteWorkspace({ name }) {
   }
 
   await deleteWorkspaceFromSync(ws.wsName);
+
+  const localOrderData = await browser.storage.local.get(LOCAL_ORDER);
+  const order = (localOrderData[LOCAL_ORDER] || []).filter(n => n !== name);
+  await browser.storage.local.set({ [LOCAL_ORDER]: order });
+
   console.log("Workspace deleted:", name);
   return { ok: true };
 }
@@ -612,6 +618,10 @@ async function handleRenameWorkspace({ oldName, newName, icon, color }) {
       delete wins[oldName];
       await browser.storage.local.set({ [LOCAL_WINS]: wins });
     }
+
+    const localOrderData = await browser.storage.local.get(LOCAL_ORDER);
+    const order = (localOrderData[LOCAL_ORDER] || []).map(n => n === oldName ? newName : n);
+    await browser.storage.local.set({ [LOCAL_ORDER]: order });
   }
 
   return newWs;
@@ -628,7 +638,9 @@ async function handleExportWorkspaces() {
       if (ws) workspaces.push(ws);
     }
   }
-  return { version: "2.0", exported_at: new Date().toISOString(), workspaces };
+  const localOrderData = await browser.storage.local.get(LOCAL_ORDER);
+  const order = localOrderData[LOCAL_ORDER] || [];
+  return { version: "2.0", exported_at: new Date().toISOString(), workspaces, order };
 }
 
 // Returns the backup data structured for the review UI. No comparison with local state.
@@ -770,7 +782,11 @@ async function handleGetState() {
     tabs:      []
   };
 
-  return workspaces;
+  const localOrderData = await browser.storage.local.get(LOCAL_ORDER);
+  const order = (localOrderData[LOCAL_ORDER] || [])
+    .filter(name => name !== DEFAULT_WORKSPACE_ID && workspaces[name]);
+
+  return { workspaces, order };
 }
 
 async function handleGetDevices() {
@@ -813,6 +829,11 @@ async function handleSetDeviceName({ name }) {
   return { ok: true };
 }
 
+async function handleSetOrder({ order }) {
+  await browser.storage.local.set({ [LOCAL_ORDER]: order });
+  return { ok: true };
+}
+
 // ─── Message router ───────────────────────────────────────────────────────────
 
 browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -832,6 +853,7 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case "SELECTIVE_IMPORT":    handler = () => handleSelectiveImport(msg.payload); break;
     case "GET_DEVICES":         handler = handleGetDevices; break;
     case "SET_DEVICE_NAME":     handler = () => handleSetDeviceName(msg.payload); break;
+    case "SET_ORDER":           handler = () => handleSetOrder(msg.payload); break;
     default:
       sendResponse({ error: "Unknown message type: " + msg.type });
       return false;

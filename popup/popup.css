@@ -226,6 +226,7 @@ main::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; 
 .ws-card:hover .ws-btn { opacity: 1; }
 .ws-btn:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
 .ws-btn.danger:hover { border-color: var(--danger); color: var(--danger); background: rgba(224,85,85,.1); }
+.ws-btn:disabled { opacity: 0.2; pointer-events: none; }
 
 /* ─── Shared overlay styles ──────────────────────────────────────────────── */
 
