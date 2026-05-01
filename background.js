@@ -431,9 +431,8 @@ async function handleCreateWorkspace({ name, color, icon }) {
   if (duplicate) throw new Error("A workspace with this name already exists.");
 
   const deviceId = await myDeviceId();
-  // Container is always created with DEFAULT_ICON for cross-device consistency.
   // cookieStoreId is never stored — resolved by name on each device at runtime.
-  await findOrCreateContainer(name, color || "blue", DEFAULT_ICON);
+  await findOrCreateContainer(name, color || "blue", icon || DEFAULT_ICON);
 
   const ws = {
     wsName:    name,
@@ -486,7 +485,7 @@ async function handleOpenWorkspace({ name }) {
   console.log("Opening workspace:", ws.wsName);
 
   // Container resolved by name — cookieStoreId differs between devices
-  const container = await findOrCreateContainer(ws.wsName, ws.color, DEFAULT_ICON);
+  const container = await findOrCreateContainer(ws.wsName, ws.color, ws.icon || DEFAULT_ICON);
 
   if (ws.windowId !== null) {
     try {
@@ -707,7 +706,7 @@ async function handleSelectiveImport({ create, addTabs }) {
     }
     if (!ws) continue;
 
-    const container = await findOrCreateContainer(ws.wsName, ws.color, DEFAULT_ICON);
+    const container = await findOrCreateContainer(ws.wsName, ws.color, ws.icon || DEFAULT_ICON);
 
     if (ws.windowId !== null) {
       // Window is open: add tabs live with group handling
@@ -924,7 +923,7 @@ async function resolveContainerForWindow(windowId) {
   if (!ws) return null;
 
   // Always resolve by name — no cookieStoreId stored in workspace
-  return await findOrCreateContainer(ws.wsName, ws.color, DEFAULT_ICON);
+  return await findOrCreateContainer(ws.wsName, ws.color, ws.icon || DEFAULT_ICON);
 }
 
 // We intercept tab creation to ensure all tabs opened in a workspace window are assigned
