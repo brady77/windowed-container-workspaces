@@ -700,14 +700,14 @@ async function handleSelectiveImport({ create, addTabs }) {
   const findByName = name => Object.values(workspaces).find(w => w.wsName.toLowerCase() === name.toLowerCase());
 
   for (const entry of (addTabs || [])) {
-    const { wsName, wsColor, tabs } = entry;
+    const { wsName, wsColor, wsIcon, tabs } = entry;
     if (!tabs || tabs.length === 0) continue;
 
     let ws = findByName(wsName);
 
     if (!ws) {
       try {
-        await handleCreateWorkspace({ name: wsName, color: wsColor || "blue" });
+        await handleCreateWorkspace({ name: wsName, color: wsColor || "blue", icon: wsIcon || DEFAULT_ICON });
         createdCount++;
         workspaces = await loadWorkspaces();
         ws = findByName(wsName);

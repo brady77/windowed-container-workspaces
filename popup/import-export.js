@@ -299,6 +299,7 @@ function buildPayload() {
     addTabs.push({
       wsName:  ws.wsName  || ws.name  || "",
       wsColor: ws.color   || "blue",
+      wsIcon:  ws.icon    || "circle",
       tabs: checked.map(cb => (ws.tabs || [])[parseInt(cb.dataset.tabIdx)])
     });
   });
