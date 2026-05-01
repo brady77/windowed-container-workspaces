@@ -100,6 +100,33 @@ Each device stores its own workspace snapshots independently under a unique devi
 | `cookies` | Required by Firefox when working with containers |
 | `tabGroups` | Save and restore tab groups within workspaces |
 
+## Privacy & Data
+
+Windowed Container Workspaces stores and processes the following data:
+
+**Stored locally on your device (`storage.local`):**
+- A randomly generated device ID
+- Your device name (auto-generated or manually set by you)
+- Mapping of open workspace windows
+
+**Stored locally and optionally synced via Firefox Sync (`storage.sync`):**
+- Workspace names, colors, and icons
+- Tab group names, colors, and collapsed state
+- Tab URLs and page titles
+- Tab pinned state
+- Device ID and device name
+
+**No data is ever sent to the extension developer.**
+
+If you use Firefox Sync with Add-ons sync enabled, all of the above
+`storage.sync` data is end-to-end encrypted and synced to Mozilla's servers —
+the same way Firefox syncs your bookmarks and passwords. The developer has no
+access to this data. You can disable this in Firefox Sync settings
+(about:preferences#sync) by turning off Add-ons sync.
+
+The Export/Import backup feature saves data only to your local filesystem.
+No network requests are made.
+
 ## Contributing
 
 Issues and pull requests are welcome. Please open an issue before submitting large changes.
