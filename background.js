@@ -1043,8 +1043,8 @@ browser.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
 // ─── Badge ────────────────────────────────────────────────────────────────────
 
 const COLOR_MAP = {
-  blue: "#3b82f6", turquoise: "#0ea5e9", green: "#22c55e", yellow: "#eab308",
-  orange: "#f97316", red: "#ef4444", pink: "#ec4899", purple: "#a855f7",
+  blue: "#37adff", turquoise: "#00c79a", green: "#51cd00", yellow: "#ffcb00",
+  orange: "#ff9f00", red: "#ff613d", pink: "#ff4bda", purple: "#af51f5",
 };
 
 async function updateBadge(windowId) {

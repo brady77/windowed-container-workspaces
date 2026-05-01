@@ -1,33 +1,25 @@
 // ─── Workspace Manager – popup.js ────────────────────────────────────────────
 
 const CONTAINER_COLORS = [
-  { id: "blue",      hex: "#3b82f6" },
-  { id: "turquoise", hex: "#0ea5e9" },
-  { id: "green",     hex: "#22c55e" },
-  { id: "yellow",    hex: "#eab308" },
-  { id: "orange",    hex: "#f97316" },
-  { id: "red",       hex: "#ef4444" },
-  { id: "pink",      hex: "#ec4899" },
-  { id: "purple",    hex: "#a855f7" },
+  { id: "blue",      hex: "#37adff" },
+  { id: "turquoise", hex: "#00c79a" },
+  { id: "green",     hex: "#51cd00" },
+  { id: "yellow",    hex: "#ffcb00" },
+  { id: "orange",    hex: "#ff9f00" },
+  { id: "red",       hex: "#ff613d" },
+  { id: "pink",      hex: "#ff4bda" },
+  { id: "purple",    hex: "#af51f5" },
 ];
 
-const CONTAINER_ICONS = [
-  { id: "fingerprint", emoji: "🖐"  },
-  { id: "briefcase",   emoji: "💼" },
-  { id: "dollar",      emoji: "💵" },
-  { id: "cart",        emoji: "🛒" },
-  { id: "vacation",    emoji: "✈️"  },
-  { id: "gift",        emoji: "🎁" },
-  { id: "food",        emoji: "🍽️" },
-  { id: "fruit",       emoji: "🍎" },
-  { id: "pet",         emoji: "🐾" },
-  { id: "tree",        emoji: "🌲" },
-  { id: "chill",       emoji: "😎" },
-  { id: "circle",      emoji: "⚫" },
-  { id: "fence",       emoji: "🏡" },
+const CONTAINER_ICON_IDS = [
+  "fingerprint", "briefcase", "dollar", "cart", "vacation",
+  "gift", "food", "fruit", "pet", "tree", "chill", "circle", "fence",
 ];
 
-const ICON_EMOJI  = Object.fromEntries(CONTAINER_ICONS.map(i => [i.id, i.emoji]));
+function iconUrl(id) {
+  return id ? `resource://usercontext-content/${id}.svg` : null;
+}
+
 const COLOR_HEX   = Object.fromEntries(CONTAINER_COLORS.map(c => [c.id, c.hex]));
 COLOR_HEX["gray"] = "#6b7280";
 
@@ -75,10 +67,9 @@ function render() {
     card.dataset.id = ws.wsName;
     card.style.animationDelay = `${idx * 30}ms`;
 
-    const colorHex  = COLOR_HEX[ws.color] || "#4f8ef7";
-    const iconEmoji = ICON_EMOJI[ws.icon]  || "🔑";
-    const tabCount  = ws.tabs.length;
-    const isLive    = ws.windowId !== null;
+    const colorHex = COLOR_HEX[ws.color] || "#4f8ef7";
+    const tabCount = ws.tabs.length;
+    const isLive   = ws.windowId !== null;
 
     // Color is set via JS after inserting HTML (CSP blocks inline style attributes)
     // Dot
@@ -89,7 +80,13 @@ function render() {
     // Icon
     const icon = document.createElement("div");
     icon.className = "ws-icon";
-    icon.textContent = iconEmoji;
+    const url = iconUrl(ws.icon);
+    if (url) {
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = ws.icon || "";
+      icon.appendChild(img);
+    }
 
     // Info
     const info = document.createElement("div");
@@ -240,8 +237,8 @@ function showModal(wsName = null) {
   document.getElementById("btn-save").textContent      = ws ? "Save" : "Create";
   document.getElementById("input-name").value          = ws ? ws.wsName : "";
 
-  selColor = ws ? ws.color : CONTAINER_COLORS[0].id;
-  selIcon  = ws ? (ws.icon || "circle") : "circle";
+  selColor = ws ? (ws.color || CONTAINER_COLORS[0].id) : CONTAINER_COLORS[0].id;
+  selIcon  = ws ? (ws.icon  || "circle") : "circle";
 
   renderColorPicker();
   renderIconPicker();
@@ -271,12 +268,15 @@ function renderColorPicker() {
 function renderIconPicker() {
   const el = document.getElementById("icon-picker");
   el.innerHTML = "";
-  CONTAINER_ICONS.forEach(ic => {
+  CONTAINER_ICON_IDS.forEach(id => {
     const btn = document.createElement("button");
-    btn.className = "icon-btn" + (ic.id === selIcon ? " selected" : "");
-    btn.textContent = ic.emoji;
-    btn.title = ic.id;
-    btn.addEventListener("click", () => { selIcon = ic.id; renderIconPicker(); });
+    btn.className = "icon-btn" + (id === selIcon ? " selected" : "");
+    btn.title = id;
+    const img = document.createElement("img");
+    img.src = iconUrl(id);
+    img.alt = id;
+    btn.appendChild(img);
+    btn.addEventListener("click", () => { selIcon = id; renderIconPicker(); });
     el.appendChild(btn);
   });
 }

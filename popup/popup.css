@@ -142,10 +142,17 @@ main::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; 
 }
 
 .ws-icon {
-  font-size: 15px;
   flex-shrink: 0;
   width: 20px;
   text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ws-icon img {
+  width: 16px;
+  height: 16px;
+  opacity: 0.85;
 }
 
 .ws-info { flex: 1; min-width: 0; }
@@ -281,13 +288,19 @@ input[type="text"]::placeholder { color: var(--text-dim); opacity: .5; }
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 5px;
-  font-size: 16px;
   cursor: pointer;
   transition: all .12s;
   flex-shrink: 0;
 }
+.icon-btn img {
+  width: 18px;
+  height: 18px;
+  opacity: 0.7;
+}
 .icon-btn:hover { border-color: var(--border2); background: var(--surface2); }
+.icon-btn:hover img { opacity: 1; }
 .icon-btn.selected { border-color: var(--accent); background: var(--accent-dim); }
+.icon-btn.selected img { opacity: 1; }
 
 /* ─── Confirm dialog ─────────────────────────────────────────────────────── */
 
