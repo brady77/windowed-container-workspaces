@@ -112,11 +112,6 @@ function render() {
     info.appendChild(nameEl);
     info.appendChild(metaEl);
 
-    // Status
-    const status = document.createElement("span");
-    status.className = `ws-status ${isLive ? "live" : "sleep"}`;
-    status.textContent = isLive ? "active" : "sleeping";
-
     // Actions
     const actions = document.createElement("div");
     actions.className = "ws-actions";
@@ -176,7 +171,6 @@ function render() {
     card.appendChild(dot);
     card.appendChild(icon);
     card.appendChild(info);
-    card.appendChild(status);
     card.appendChild(actions);
 
     card.addEventListener("click", (e) => {
