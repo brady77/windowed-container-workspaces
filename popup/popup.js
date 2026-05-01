@@ -27,10 +27,11 @@ const DEFAULT_WORKSPACE_ID = "ws_default";
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-let workspaces = {};
-let editingId  = null; // wsName of workspace being edited, or null for new
-let selColor   = CONTAINER_COLORS[0].id;
-let selIcon    = "circle";
+let workspaces   = {};
+let editingId    = null; // wsName of workspace being edited, or null for new
+let selColor     = CONTAINER_COLORS[0].id;
+let selIcon      = "circle";
+let searchFilter = "";
 
 // ─── Messaging ────────────────────────────────────────────────────────────────
 
@@ -45,13 +46,25 @@ function wsDisplayName(ws) {
 }
 
 function render() {
-  const list    = document.getElementById("workspace-list");
-  const emptyEl = document.getElementById("empty-state");
-  const cards   = Object.values(workspaces).sort((a, b) => {
+  const list     = document.getElementById("workspace-list");
+  const emptyEl  = document.getElementById("empty-state");
+  const searchBar = document.getElementById("search-bar");
+
+  const allCards = Object.values(workspaces).sort((a, b) => {
     if (a.wsName === DEFAULT_WORKSPACE_ID) return -1;
     if (b.wsName === DEFAULT_WORKSPACE_ID) return 1;
     return a.wsName.localeCompare(b.wsName);
   });
+
+  // Show search bar only when there are enough workspaces to warrant filtering
+  const nonDefault = allCards.filter(w => w.wsName !== DEFAULT_WORKSPACE_ID);
+  searchBar.classList.toggle("hidden", nonDefault.length < 5);
+
+  const cards = searchFilter
+    ? allCards.filter(w =>
+        w.wsName === DEFAULT_WORKSPACE_ID ||
+        w.wsName.toLowerCase().includes(searchFilter.toLowerCase()))
+    : allCards;
 
   list.querySelectorAll(".ws-card").forEach(el => el.remove());
 
@@ -243,12 +256,14 @@ function showModal(wsName = null) {
   renderColorPicker();
   renderIconPicker();
 
+  document.body.style.minHeight = "430px";
   document.getElementById("modal-overlay").classList.remove("hidden");
   setTimeout(() => document.getElementById("input-name").focus(), 50);
 }
 
 function hideModal() {
   document.getElementById("modal-overlay").classList.add("hidden");
+  document.body.style.minHeight = "";
   editingId = null;
 }
 
@@ -353,6 +368,13 @@ function showToast(msg) {
 function escHtml(str) {
   return str.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
+
+// ─── Search ───────────────────────────────────────────────────────────────────
+
+document.getElementById("input-search").addEventListener("input", (e) => {
+  searchFilter = e.target.value;
+  render();
+});
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 

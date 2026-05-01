@@ -29,7 +29,6 @@ body {
   width: var(--popup-w);
   min-width: var(--popup-w);
   max-width: var(--popup-w);
-  min-height: 420px;
   overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
@@ -88,6 +87,29 @@ header {
 }
 .btn-icon:hover { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
 
+/* ─── Search field ───────────────────────────────────────────────────────── */
+
+#search-bar {
+  padding: 6px 8px 0;
+}
+
+#search-bar.hidden { display: none; }
+
+#input-search {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  transition: border-color .15s;
+}
+#input-search:focus { border-color: var(--accent); }
+#input-search::placeholder { color: var(--text-dim); opacity: .6; }
+
 /* ─── Workspace list ─────────────────────────────────────────────────────── */
 
 main {
@@ -95,7 +117,8 @@ main {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 380px;
+  max-height: 440px;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
