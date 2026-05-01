@@ -114,13 +114,13 @@ header {
 
 main {
   padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 440px;
-  min-height: 0;
+  max-height: 480px;
   overflow-y: auto;
   overflow-x: hidden;
+}
+
+.ws-card + .ws-card {
+  margin-top: 4px;
 }
 
 main::-webkit-scrollbar { width: 4px; }
