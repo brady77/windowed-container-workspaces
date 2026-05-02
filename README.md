@@ -116,16 +116,22 @@ Windowed Container Workspaces stores and processes the following data:
 - Tab pinned state
 - Device ID and device name
 
-**No data is ever sent to the extension developer.**
+This data is stored by Firefox as extension data.
 
-If you use Firefox Sync with Add-ons sync enabled, all of the above
-`storage.sync` data is end-to-end encrypted and synced to Mozilla's servers —
-the same way Firefox syncs your bookmarks and passwords. The developer has no
-access to this data. You can disable this in Firefox Sync settings
-(about:preferences#sync) by turning off Add-ons sync.
+If Firefox Sync for add-ons is enabled by the user, Firefox may synchronize this extension data between the user's own Firefox profiles/devices using Mozilla Firefox Sync.
+
+Firefox Sync feature is delivered by Mozilla Firefox, not by the Windowed Container Workspaces extension.
+
+The developer does not receive, access, store, process, sell, or share this data.
+
+The extension does not use analytics, telemetry, advertising, tracking scripts, or any developer-operated backend server.
+
+The `cookies` permission is used only for Firefox container-related functionality. The extension does not read, store, export, or transmit cookie values.
 
 The Export/Import backup feature saves data only to your local filesystem.
 No network requests are made.
+
+Sync requires a Firefox account with Sync enabled.
 
 ## Contributing
 
