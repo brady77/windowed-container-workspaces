@@ -195,12 +195,11 @@ function render() {
 
     if (ws.wsName !== DEFAULT_WORKSPACE_ID) {
       send("GET_WS_SIZE", { name: ws.wsName }).then(({ bytes }) => {
-        const kb = bytes / 1024;
-        const sizeStr = kb < 1 ? `${bytes} B` : `${kb.toFixed(1)} KB`;
+        const pct = Math.round(bytes / 8192 * 100);
         const cls = bytes > 7168 ? "size-danger" : bytes > 6144 ? "size-warning" : "";
         const sizeSpan = document.createElement("span");
         if (cls) sizeSpan.className = cls;
-        sizeSpan.textContent = ` · ${sizeStr} / 8 KB`;
+        sizeSpan.textContent = ` · ${pct}%`;
         metaEl.appendChild(sizeSpan);
       }).catch(() => {});
     }
