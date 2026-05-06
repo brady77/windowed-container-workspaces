@@ -929,12 +929,21 @@ browser.windows.onRemoved.addListener(async (windowId) => {
   const workspaces = await loadWorkspaces();
   for (const ws of Object.values(workspaces)) {
     if (ws.windowId === windowId) {
-      // Flush any pending debounced snapshot so the latest tab/group state is preserved
+      // Cancel any pending debounced snapshot — we're about to take a definitive one.
       const pending = pendingSnapshots.get(ws.wsName);
       if (pending) {
         clearTimeout(snapshotTimers.get(ws.wsName));
         snapshotTimers.delete(ws.wsName);
         pendingSnapshots.delete(ws.wsName);
+      }
+      // Always attempt a fresh snapshot: tab.url reflects the navigation target even
+      // for tabs still loading (e.g. server unavailable), so this captures URLs that
+      // the debounced snapshot would have missed. Fall back to the pending snapshot
+      // only if the window is already gone by the time we query.
+      const snap = await snapshotWindow(windowId).catch(() => null);
+      if (snap && snap.length > 0) {
+        ws.tabs = snap;
+      } else if (pending) {
         ws.tabs = pending.tabs;
       }
       ws.windowId = null;
@@ -1080,7 +1089,12 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
     return;
   }
 
-  if (changeInfo.status !== "complete" && changeInfo.groupId === undefined) return;
+  // Snapshot on page load complete, group change, OR http/https navigation start.
+  // The navigation-start case captures the URL for tabs that never finish loading
+  // (e.g. server unavailable) — tab.url is already set to the target URL at this point.
+  const isNavStart = changeInfo.url &&
+    (changeInfo.url.startsWith("http://") || changeInfo.url.startsWith("https://"));
+  if (!isNavStart && changeInfo.status !== "complete" && changeInfo.groupId === undefined) return;
   const workspaces = await loadWorkspaces();
   const ws = Object.values(workspaces).find(w => w.windowId === tab.windowId);
   if (!ws) return;
