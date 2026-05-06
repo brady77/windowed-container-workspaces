@@ -349,42 +349,48 @@ async function deleteContainer(cookieStoreId) {
 // ─── Window helpers ───────────────────────────────────────────────────────────
 
 async function openWorkspaceWindow(workspace, cookieStoreId) {
-  const urls = workspace.tabs.length > 0
-    ? workspace.tabs.map(t => t.url)
-    : ["about:blank"];
-
   const win = await browser.windows.create({});
   console.log("Window created:", win.id);
 
   const defaultTabs = await browser.tabs.query({ windowId: win.id });
 
-  const createdTabs = [];
-  for (let i = 0; i < urls.length; i++) {
-    const tab = await browser.tabs.create({
-      windowId: win.id,
-      url: urls[i],
-      cookieStoreId,
-      active: i === 0
-    });
-    console.log("Tab created:", tab.id, "cookieStoreId:", tab.cookieStoreId);
-    createdTabs.push(tab);
+  // Each entry pairs the created Firefox tab with its saved metadata.
+  // Tabs that fail to open (e.g. file:// URLs in containers) are skipped
+  // so one bad URL cannot abort the rest of the workspace restore.
+  const pairedTabs = [];
+  let firstTab = true;
+  for (const saved of workspace.tabs) {
+    let tab;
+    try {
+      tab = await browser.tabs.create({
+        windowId: win.id,
+        url: saved.url,
+        cookieStoreId,
+        active: firstTab
+      });
+      firstTab = false;
+      console.log("Tab created:", tab.id, "cookieStoreId:", tab.cookieStoreId);
+    } catch (e) {
+      console.warn("Could not open tab, skipping:", saved.url, e.message);
+      continue;
+    }
+    pairedTabs.push({ created: tab, saved });
   }
 
   // Restore pinned state
-  for (let i = 0; i < createdTabs.length && i < workspace.tabs.length; i++) {
-    if (workspace.tabs[i].pinned) {
-      await browser.tabs.update(createdTabs[i].id, { pinned: true });
+  for (const { created, saved } of pairedTabs) {
+    if (saved.pinned) {
+      await browser.tabs.update(created.id, { pinned: true });
     }
   }
 
   // Restore tab groups
   try {
     const groupsToCreate = {};
-    for (let i = 0; i < workspace.tabs.length && i < createdTabs.length; i++) {
-      const saved = workspace.tabs[i];
+    for (const { created, saved } of pairedTabs) {
       if (saved.groupId !== null && saved.groupInfo) {
         if (!groupsToCreate[saved.groupId]) groupsToCreate[saved.groupId] = { tabIds: [], info: saved.groupInfo };
-        groupsToCreate[saved.groupId].tabIds.push(createdTabs[i].id);
+        groupsToCreate[saved.groupId].tabIds.push(created.id);
       }
     }
     for (const key of Object.keys(groupsToCreate)) {
@@ -401,8 +407,9 @@ async function openWorkspaceWindow(workspace, cookieStoreId) {
     console.warn("Group restore failed:", e.message);
   }
 
-  // Close the default blank tab opened automatically by browser.windows.create
-  if (defaultTabs.length > 0) {
+  // Close the default blank tab opened automatically by browser.windows.create,
+  // unless no workspace tabs were successfully opened (keep it so the window stays open).
+  if (defaultTabs.length > 0 && pairedTabs.length > 0) {
     await browser.tabs.remove(defaultTabs.map(t => t.id));
   }
 
