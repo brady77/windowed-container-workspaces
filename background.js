@@ -757,11 +757,50 @@ async function handleGetWsSize({ name }) {
 
 async function handleGetState() {
   const workspaces = await loadWorkspaces();
-  const wins = await browser.windows.getAll();
+  const wins = await browser.windows.getAll({ populate: true });
   const openIds = new Set(wins.map(w => w.id));
 
+  // Collect windowIds that are already correctly associated (valid and claimed)
+  const claimedWindowIds = new Set(
+    Object.values(workspaces)
+      .filter(ws => ws.windowId !== null && openIds.has(ws.windowId))
+      .map(ws => ws.windowId)
+  );
+
   for (const ws of Object.values(workspaces)) {
-    if (ws.windowId !== null && !openIds.has(ws.windowId)) {
+    if (ws.wsName === DEFAULT_WORKSPACE_ID) continue;
+    if (ws.windowId === null || openIds.has(ws.windowId)) continue;
+
+    // Stale windowId (e.g. after crash + FF session restore): try to adopt an orphaned
+    // window by matching its tabs' container to this workspace's container.
+    let adopted = null;
+    try {
+      const containers = await browser.contextualIdentities.query({ name: ws.wsName });
+      if (containers && containers.length > 0) {
+        const cookieStoreId = containers[0].cookieStoreId;
+        const orphan = wins.find(w =>
+          !claimedWindowIds.has(w.id) &&
+          (w.tabs || []).some(t => t.cookieStoreId === cookieStoreId)
+        );
+        if (orphan) adopted = orphan.id;
+      }
+    } catch (e) {
+      console.warn("Window adoption lookup failed for:", ws.wsName, e.message);
+    }
+
+    if (adopted !== null) {
+      // Re-adopt the restored window and snapshot it immediately so the saved tab
+      // list reflects the actual open tabs (not a potentially stale pre-crash snapshot).
+      ws.windowId = adopted;
+      claimedWindowIds.add(adopted);
+      await saveWindowId(ws.wsName, adopted);
+      const snap = await snapshotWindow(adopted).catch(() => null);
+      if (snap && snap.length > 0) {
+        ws.tabs = snap;
+        await saveWorkspace(ws);
+      }
+      console.log("Adopted orphaned window", adopted, "for workspace:", ws.wsName);
+    } else {
       ws.windowId = null;
       await saveWindowId(ws.wsName, null);
     }
