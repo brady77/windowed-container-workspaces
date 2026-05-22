@@ -357,19 +357,23 @@ async function openWorkspaceWindow(workspace, cookieStoreId) {
   // Each entry pairs the created Firefox tab with its saved metadata.
   // Tabs that fail to open (e.g. file:// URLs in containers) are skipped
   // so one bad URL cannot abort the rest of the workspace restore.
+  // Determine which saved tab should be active. Fall back to the first tab if none
+  // has active:true (e.g. older snapshots that predate this field).
+  const hasActive = workspace.tabs.some(t => t.active);
   const pairedTabs = [];
-  let firstTab = true;
   for (const saved of workspace.tabs) {
+    const isActive = hasActive ? !!saved.active : workspace.tabs.indexOf(saved) === 0;
+    const isLazy = !isActive && (saved.url.startsWith("http://") || saved.url.startsWith("https://"));
     let tab;
     try {
       tab = await browser.tabs.create({
         windowId: win.id,
         url: saved.url,
         cookieStoreId,
-        active: firstTab
+        active: isActive,
+        ...(isLazy ? { discarded: true, title: saved.title || "" } : {})
       });
-      firstTab = false;
-      console.log("Tab created:", tab.id, "cookieStoreId:", tab.cookieStoreId);
+      console.log("Tab created:", tab.id, "cookieStoreId:", tab.cookieStoreId, isLazy ? "(discarded)" : "(active)");
     } catch (e) {
       console.warn("Could not open tab, skipping:", saved.url, e.message);
       continue;
@@ -425,7 +429,7 @@ async function snapshotWindow(windowId) {
   return tabs
     .filter(t => t.url && (!t.url.startsWith("about:") || t.url === "about:blank"))
     .map(t => ({
-      url: t.url, title: t.title, pinned: t.pinned,
+      url: t.url, title: t.title, pinned: t.pinned, active: t.active,
       groupId: (t.groupId != null && t.groupId !== -1) ? t.groupId : null,
       groupInfo: (t.groupId != null && t.groupId !== -1) ? (groupMap[t.groupId] || null) : null
     }));
