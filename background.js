@@ -994,6 +994,7 @@ async function doReassign(tabId, windowId, cookieStoreId, url) {
   }
 }
 
+
 async function resolveContainerForWindow(windowId) {
   const localWins = await browser.storage.local.get(LOCAL_WINS);
   const winsMap = localWins[LOCAL_WINS] || {};
@@ -1018,6 +1019,11 @@ browser.tabs.onCreated.addListener(async (tab) => {
     const container = await resolveContainerForWindow(tab.windowId);
     if (!container) return;
 
+    // about: pages cannot run in containers — leave the tab as-is so Firefox can display it
+    if (tab.url && tab.url.startsWith("about:") && tab.url !== "about:blank") {
+      return;
+    }
+
     // If URL is already a real URL (unlikely but possible), reassign immediately
     if (tab.url && (tab.url.startsWith("http://") || tab.url.startsWith("https://"))) {
       console.log("New tab with URL in workspace window, moving to:", container.cookieStoreId, tab.url);
@@ -1038,6 +1044,9 @@ browser.tabs.onCreated.addListener(async (tab) => {
         const current = await browser.tabs.get(tab.id);
         if (current.url && (current.url.startsWith("http://") || current.url.startsWith("https://"))) {
           url = current.url;
+        } else if (current.url && current.url.startsWith("about:") && current.url !== "about:blank") {
+          removePending(tab.id);
+          return;
         }
       } catch (e) {}
       console.log("Poll result for tab:", tab.id, "->", url);
@@ -1096,6 +1105,12 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       console.log("URL arrived for parked tab:", tabId, changeInfo.url);
       removePending(tabId);
       await doReassign(tabId, windowId, cookieStoreId, changeInfo.url).catch(() => {});
+      return;
+    }
+
+    if (changeInfo.url && changeInfo.url.startsWith("about:") && changeInfo.url !== "about:blank") {
+      // about: page — leave the tab as-is so Firefox can display it
+      removePending(tabId);
       return;
     }
 
