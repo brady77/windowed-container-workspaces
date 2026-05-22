@@ -1037,8 +1037,26 @@ browser.tabs.onCreated.addListener(async (tab) => {
         }
       } catch (e) {}
       console.log("Poll result for tab:", tab.id, "->", url);
-      removePending(tab.id);
-      await doReassign(tab.id, tab.windowId, container.cookieStoreId, url).catch(() => {});
+
+      if (url !== "about:blank") {
+        removePending(tab.id);
+        await doReassign(tab.id, tab.windowId, container.cookieStoreId, url).catch(() => {});
+        return;
+      }
+
+      // Still about:blank at 50ms — the real URL from an external app may arrive shortly
+      // via onUpdated. Keep the tab in pendingTabs so that listener can handle it (real URL
+      // or blank-complete signal). Swap to a 2s safety timeout in case onUpdated never fires
+      // (e.g. tab closed before loading).
+      console.log("Tab still blank at 50ms, deferring to onUpdated:", tab.id);
+      const entry = pendingTabs.get(tab.id);
+      if (!entry) return;
+      entry.timeoutId = setTimeout(async () => {
+        if (!pendingTabs.has(tab.id)) return;
+        console.log("Safety timeout: no URL for tab", tab.id, "— reassigning blank");
+        removePending(tab.id);
+        await doReassign(tab.id, tab.windowId, container.cookieStoreId, "about:blank").catch(() => {});
+      }, 2000);
     }, 50);
 
     pendingTabs.set(tab.id, {
