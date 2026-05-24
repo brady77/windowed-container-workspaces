@@ -1019,8 +1019,10 @@ browser.tabs.onCreated.addListener(async (tab) => {
     const container = await resolveContainerForWindow(tab.windowId);
     if (!container) return;
 
-    // about: pages cannot run in containers — leave the tab as-is so Firefox can display it
-    if (tab.url && tab.url.startsWith("about:") && tab.url !== "about:blank") {
+    // about: pages cannot run in containers — leave the tab as-is so Firefox can display it.
+    // about:blank and about:newtab pass through: they are new-tab placeholders that will be
+    // reassigned to the correct container once the URL is confirmed (50ms poll or onUpdated).
+    if (tab.url && tab.url.startsWith("about:") && tab.url !== "about:blank" && tab.url !== "about:newtab") {
       return;
     }
 
@@ -1044,6 +1046,11 @@ browser.tabs.onCreated.addListener(async (tab) => {
         const current = await browser.tabs.get(tab.id);
         if (current.url && (current.url.startsWith("http://") || current.url.startsWith("https://"))) {
           url = current.url;
+        } else if (current.url === "about:newtab") {
+          // New tab page confirmed — reassign immediately to blank in the correct container
+          removePending(tab.id);
+          await doReassign(tab.id, tab.windowId, container.cookieStoreId, "about:blank").catch(() => {});
+          return;
         } else if (current.url && current.url.startsWith("about:") && current.url !== "about:blank") {
           removePending(tab.id);
           return;
@@ -1105,6 +1112,13 @@ browser.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
       console.log("URL arrived for parked tab:", tabId, changeInfo.url);
       removePending(tabId);
       await doReassign(tabId, windowId, cookieStoreId, changeInfo.url).catch(() => {});
+      return;
+    }
+
+    if (changeInfo.url === "about:newtab") {
+      // New tab page — reassign immediately to a blank tab in the correct container
+      removePending(tabId);
+      await doReassign(tabId, windowId, cookieStoreId, "about:blank").catch(() => {});
       return;
     }
 
