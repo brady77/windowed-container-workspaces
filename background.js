@@ -411,9 +411,22 @@ async function openWorkspaceWindow(workspace, cookieStoreId) {
     console.warn("Group restore failed:", e.message);
   }
 
+  // Empty workspace (or every saved tab failed to open): the default tab from
+  // browser.windows.create lives outside the container, so replace it with a new tab
+  // page in the workspace container. No URL → Firefox shows the user's new tab page.
+  let hasContainerTab = pairedTabs.length > 0;
+  if (!hasContainerTab) {
+    try {
+      await browser.tabs.create({ windowId: win.id, cookieStoreId, active: true });
+      hasContainerTab = true;
+    } catch (e) {
+      console.warn("Could not open new tab in container:", e.message);
+    }
+  }
+
   // Close the default blank tab opened automatically by browser.windows.create,
-  // unless no workspace tabs were successfully opened (keep it so the window stays open).
-  if (defaultTabs.length > 0 && pairedTabs.length > 0) {
+  // unless no container tab could be opened (keep it so the window stays open).
+  if (defaultTabs.length > 0 && hasContainerTab) {
     await browser.tabs.remove(defaultTabs.map(t => t.id));
   }
 
@@ -986,7 +999,12 @@ async function doReassign(tabId, windowId, cookieStoreId, url) {
   pendingTabs.set(tabId, { windowId, cookieStoreId, timeoutId: null });
   try {
     await browser.tabs.remove(tabId);
-    await browser.tabs.create({ windowId, url, cookieStoreId, active: true });
+    // A plain new tab is recreated without a URL so Firefox opens the user's configured
+    // new tab page (Firefox Home with shortcuts, blank page, or an extension override)
+    // inside the container. Passing "about:blank" would always force an empty page.
+    const createProps = { windowId, cookieStoreId, active: true };
+    if (url && url !== "about:blank") createProps.url = url;
+    await browser.tabs.create(createProps);
   } catch (e) {
     console.error("Error moving tab to container:", e.message);
   } finally {
