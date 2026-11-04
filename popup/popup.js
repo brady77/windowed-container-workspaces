@@ -20,6 +20,31 @@ function iconUrl(id) {
   return id ? `resource://usercontext-content/${id}.svg` : null;
 }
 
+// Feather "zap" / "zap-off": all tabs load on open vs. tabs load on click
+const ICON_ZAP = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+const ICON_ZAP_OFF = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="12.41 6.75 13 2 10.57 4.92"/><polyline points="18.57 12.91 21 10 15.66 10"/><polyline points="8 8 3 14 12 14 11 22 16 16"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+
+// Draws a container icon onto a canvas and recolors it. Firefox's container SVGs use
+// context-fill, which unprivileged extensions cannot set, and CSS masks on cross-origin
+// resource:// URLs are subject to CORS. Painting via canvas only needs the image to
+// load (as <img> already does) — a tainted canvas still displays fine.
+function tintedIcon(url, color) {
+  const size = 16;
+  const dpr = window.devicePixelRatio || 1;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = Math.round(size * dpr);
+  const img = new Image();
+  img.onload = () => {
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = "source-in";
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  };
+  img.src = url;
+  return canvas;
+}
+
 const COLOR_HEX   = Object.fromEntries(CONTAINER_COLORS.map(c => [c.id, c.hex]));
 COLOR_HEX["gray"] = "#6b7280";
 
@@ -83,22 +108,10 @@ function render() {
     const tabCount = ws.tabs.length;
     const isLive   = ws.windowId !== null;
 
-    // Color is set via JS after inserting HTML (CSP blocks inline style attributes)
-    // Dot
-    const dot = document.createElement("div");
-    dot.className = "ws-dot";
-    dot.style.setProperty("background-color", colorHex);
-
-    // Icon
+    // Icon, tinted with the workspace color (replaces the former color dot)
     const icon = document.createElement("div");
     icon.className = "ws-icon";
-    const url = iconUrl(ws.icon);
-    if (url) {
-      const img = document.createElement("img");
-      img.src = url;
-      img.alt = ws.icon || "";
-      icon.appendChild(img);
-    }
+    icon.appendChild(tintedIcon(iconUrl(ws.icon || "circle"), colorHex));
 
     // Info
     const info = document.createElement("div");
@@ -153,6 +166,17 @@ function render() {
         actions.appendChild(downBtn);
       }
 
+      const lazy = ws.lazyLoad !== false;
+      const lazyBtn = document.createElement("button");
+      lazyBtn.className = "ws-btn";
+      lazyBtn.dataset.action = "toggle-lazy";
+      lazyBtn.title = (lazy
+        ? "Tabs load when clicked. Click to load all tabs when the workspace opens."
+        : "All tabs load when the workspace opens. Click to load tabs only when clicked.")
+        + (isLive ? " Applies the next time the workspace opens." : "");
+      lazyBtn.innerHTML = lazy ? ICON_ZAP_OFF : ICON_ZAP;
+      actions.appendChild(lazyBtn);
+
       const renameBtn = document.createElement("button");
       renameBtn.className = "ws-btn";
       renameBtn.dataset.action = "rename";
@@ -168,7 +192,6 @@ function render() {
       actions.appendChild(delBtn);
     }
 
-    card.appendChild(dot);
     card.appendChild(icon);
     card.appendChild(info);
     card.appendChild(actions);
@@ -184,6 +207,7 @@ function render() {
         const action = btn.dataset.action;
         if (action === "open")      handleOpen(ws.wsName);
         if (action === "hibernate") handleHibernate(ws.wsName);
+        if (action === "toggle-lazy") handleToggleLazy(ws.wsName);
         if (action === "rename")    showModal(ws.wsName);
         if (action === "delete")    showConfirm(ws.wsName);
         if (action === "move-up")   handleMove(ws.wsName, "up");
@@ -239,6 +263,21 @@ function handleMove(wsName, direction) {
   wsOrder = order;
   render();
   send("SET_ORDER", { order }).catch(e => console.error("SET_ORDER failed:", e));
+}
+
+async function handleToggleLazy(name) {
+  const ws = workspaces[name];
+  if (!ws) return;
+  const lazyLoad = ws.lazyLoad === false; // flip; missing means lazy
+  ws.lazyLoad = lazyLoad;
+  render();
+  try {
+    const res = await send("SET_LAZY_LOAD", { name, lazyLoad });
+    if (res && res.error) throw new Error(res.error);
+  } catch (e) {
+    console.error("SET_LAZY_LOAD failed:", e);
+    await refresh();
+  }
 }
 
 async function handleHibernate(name) {

@@ -360,10 +360,12 @@ async function openWorkspaceWindow(workspace, cookieStoreId) {
   // Determine which saved tab should be active. Fall back to the first tab if none
   // has active:true (e.g. older snapshots that predate this field).
   const hasActive = workspace.tabs.some(t => t.active);
+  // lazyLoad is a per-workspace setting; missing (older snapshots) means lazy.
+  const lazyEnabled = workspace.lazyLoad !== false;
   const pairedTabs = [];
   for (const saved of workspace.tabs) {
     const isActive = hasActive ? !!saved.active : workspace.tabs.indexOf(saved) === 0;
-    const isLazy = !isActive && (saved.url.startsWith("http://") || saved.url.startsWith("https://"));
+    const isLazy = lazyEnabled && !isActive && (saved.url.startsWith("http://") || saved.url.startsWith("https://"));
     let tab;
     try {
       tab = await browser.tabs.create({
@@ -892,6 +894,19 @@ async function handleSetDeviceName({ name }) {
   return { ok: true };
 }
 
+async function handleSetLazyLoad({ name, lazyLoad }) {
+  const workspaces = await loadWorkspaces();
+  const ws = workspaces[name];
+  if (!ws) throw new Error("Workspace not found: " + name);
+  ws.lazyLoad = !!lazyLoad;
+  // A debounced snapshot holds its own copy of ws; update it so the deferred
+  // save does not overwrite the new setting with the old value.
+  const pending = pendingSnapshots.get(name);
+  if (pending) pending.lazyLoad = ws.lazyLoad;
+  await saveWorkspace(ws);
+  return { lazyLoad: ws.lazyLoad };
+}
+
 async function handleSetOrder({ order }) {
   await browser.storage.local.set({ [LOCAL_ORDER]: order });
   return { ok: true };
@@ -917,6 +932,7 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     case "GET_DEVICES":         handler = handleGetDevices; break;
     case "SET_DEVICE_NAME":     handler = () => handleSetDeviceName(msg.payload); break;
     case "SET_ORDER":           handler = () => handleSetOrder(msg.payload); break;
+    case "SET_LAZY_LOAD":       handler = () => handleSetLazyLoad(msg.payload); break;
     default:
       sendResponse({ error: "Unknown message type: " + msg.type });
       return false;
