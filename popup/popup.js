@@ -20,10 +20,6 @@ function iconUrl(id) {
   return id ? `resource://usercontext-content/${id}.svg` : null;
 }
 
-// Feather "zap" / "zap-off": all tabs load on open vs. tabs load on click
-const ICON_ZAP = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
-const ICON_ZAP_OFF = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="12.41 6.75 13 2 10.57 4.92"/><polyline points="18.57 12.91 21 10 15.66 10"/><polyline points="8 8 3 14 12 14 11 22 16 16"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
-
 // Draws a container icon onto a canvas and recolors it. Firefox's container SVGs use
 // context-fill, which unprivileged extensions cannot set, and CSS masks on cross-origin
 // resource:// URLs are subject to CORS. Painting via canvas only needs the image to
@@ -174,7 +170,10 @@ function render() {
         ? "Tabs load when clicked. Click to load all tabs when the workspace opens."
         : "All tabs load when the workspace opens. Click to load tabs only when clicked.")
         + (isLive ? " Applies the next time the workspace opens." : "");
-      lazyBtn.innerHTML = lazy ? ICON_ZAP_OFF : ICON_ZAP;
+      // Feather "zap-off" (lazy) / "zap" (load all). Literal strings only, so the
+      // AMO linter does not flag a dynamic innerHTML assignment.
+      if (lazy) lazyBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="12.41 6.75 13 2 10.57 4.92"/><polyline points="18.57 12.91 21 10 15.66 10"/><polyline points="8 8 3 14 12 14 11 22 16 16"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+      else      lazyBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
       actions.appendChild(lazyBtn);
 
       const renameBtn = document.createElement("button");
